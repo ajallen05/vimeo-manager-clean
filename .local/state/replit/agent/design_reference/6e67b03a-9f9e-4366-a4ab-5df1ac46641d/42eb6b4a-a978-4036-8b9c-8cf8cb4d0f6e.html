@@ -1,0 +1,686 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vimeo Manager - Video Management Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                },
+                fontFamily: {
+                    sans: ["var(--font-sans)"],
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: hsl(210 40% 98%);
+            --foreground: hsl(210 40% 8%);
+            --card: hsl(210 40% 100%);
+            --card-foreground: hsl(210 40% 8%);
+            --popover: hsl(210 40% 100%);
+            --popover-foreground: hsl(210 40% 8%);
+            --primary: hsl(214 84% 56%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(210 40% 96%);
+            --secondary-foreground: hsl(210 40% 16%);
+            --muted: hsl(210 40% 96%);
+            --muted-foreground: hsl(210 40% 45%);
+            --accent: hsl(239 84% 67%);
+            --accent-foreground: hsl(210 40% 98%);
+            --destructive: hsl(0 84% 60%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(210 40% 90%);
+            --input: hsl(210 40% 96%);
+            --ring: hsl(214 84% 56%);
+            --radius: 8px;
+            --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+        }
+        
+        .dark {
+            --background: hsl(210 40% 8%);
+            --foreground: hsl(210 40% 98%);
+            --card: hsl(210 40% 10%);
+            --card-foreground: hsl(210 40% 98%);
+            --popover: hsl(210 40% 10%);
+            --popover-foreground: hsl(210 40% 98%);
+            --primary: hsl(214 84% 56%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(210 40% 12%);
+            --secondary-foreground: hsl(210 40% 90%);
+            --muted: hsl(210 40% 12%);
+            --muted-foreground: hsl(210 40% 65%);
+            --accent: hsl(239 84% 67%);
+            --accent-foreground: hsl(210 40% 98%);
+            --destructive: hsl(0 84% 60%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(210 40% 20%);
+            --input: hsl(210 40% 12%);
+            --ring: hsl(214 84% 56%);
+        }
+
+        body {
+            font-family: var(--font-sans);
+        }
+
+        .loading-spinner {
+            border: 2px solid hsl(var(--muted));
+            border-top: 2px solid hsl(var(--primary));
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-background text-foreground min-h-screen">
+    <!-- @COMPONENT: AppHeader -->
+    <header class="bg-card border-b border-border sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-video text-primary-foreground text-sm"></i>
+                    </div>
+                    <h1 class="text-xl font-semibold">Vimeo Manager</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- @STATE: connectionStatus:string = 'connected' -->
+                    <div class="flex items-center space-x-2 text-sm text-muted-foreground">
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span data-bind="connectionStatus">Connected to Vimeo API</span>
+                    </div>
+                    <button class="p-2 hover:bg-muted rounded-md" data-implementation="Settings/Configuration modal">
+                        <i class="fas fa-cog text-muted-foreground"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- @END_COMPONENT: AppHeader -->
+
+    <!-- @COMPONENT: MainNavigation -->
+    <nav class="bg-card border-b border-border">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex space-x-8">
+                <!-- @STATE: activeTab:string = 'download' -->
+                <button class="nav-tab active px-4 py-3 border-b-2 border-primary text-primary font-medium" 
+                        data-event="click:setActiveTab('download')" 
+                        data-tab="download">
+                    <i class="fas fa-download mr-2"></i>Download
+                </button>
+                <button class="nav-tab px-4 py-3 border-b-2 border-transparent text-muted-foreground hover:text-foreground font-medium" 
+                        data-event="click:setActiveTab('upload')" 
+                        data-tab="upload">
+                    <i class="fas fa-upload mr-2"></i>Upload
+                </button>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: MainNavigation -->
+
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        <!-- @COMPONENT: DownloadPage -->
+        <div id="download-page" class="tab-content">
+            <div class="mb-8">
+                <h2 class="text-2xl font-semibold mb-2">Download Videos & Captions</h2>
+                <p class="text-muted-foreground">Select a folder to view and download your Vimeo content</p>
+            </div>
+
+            <!-- @COMPONENT: FolderSelector -->
+            <div class="bg-card rounded-lg border border-border p-6 mb-8">
+                <label for="folder-select" class="block text-sm font-medium mb-3">Select Folder</label>
+                <select id="folder-select" class="w-full max-w-md px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+                        data-event="change:handleFolderSelect" 
+                        data-implementation="Populate with Vimeo folders from API">
+                    <option value="" data-mock="true">Select folder</option>
+                    <option value="folder1" data-mock="true">Exercise Videos</option>
+                    <option value="folder2" data-mock="true">Yoga Sessions</option>
+                    <option value="folder3" data-mock="true">Breathing Exercises</option>
+                </select>
+            </div>
+            <!-- @END_COMPONENT: FolderSelector -->
+
+            <!-- @COMPONENT: VideoTable -->
+            <div class="bg-card rounded-lg border border-border overflow-hidden">
+                <div class="px-6 py-4 border-b border-border">
+                    <h3 class="text-lg font-medium">Videos in Folder</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-muted">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-sm font-medium text-muted-foreground">Vimeo ID</th>
+                                <th class="px-6 py-3 text-left text-sm font-medium text-muted-foreground">Video Title</th>
+                                <th class="px-6 py-3 text-left text-sm font-medium text-muted-foreground">Tags</th>
+                                <th class="px-6 py-3 text-left text-sm font-medium text-muted-foreground">Caption</th>
+                                <th class="px-6 py-3 text-left text-sm font-medium text-muted-foreground">Video</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-border">
+                            <!-- @MAP: videos.map(video => ( -->
+                            <tr class="hover:bg-muted/50">
+                                <td class="px-6 py-4 text-sm font-mono text-muted-foreground" data-bind="video.id" data-mock="true">123456</td>
+                                <td class="px-6 py-4 text-sm font-medium" data-bind="video.title" data-mock="true">Morning Yoga Routine</td>
+                                <td class="px-6 py-4 text-sm text-muted-foreground" data-bind="video.tags" data-mock="true">Exercise, Yoga, Wellness</td>
+                                <td class="px-6 py-4">
+                                    <button class="px-3 py-1 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80 transition-colors"
+                                            data-event="click:showCaptions(video.id)"
+                                            data-implementation="Fetch and display captions in modal">
+                                        <i class="fas fa-closed-captioning mr-1"></i>View
+                                    </button>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <button class="px-3 py-1 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors"
+                                            data-event="click:showVideo(video.id)"
+                                            data-implementation="Open video player modal">
+                                        <i class="fas fa-play mr-1"></i>View
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-muted/50">
+                                <td class="px-6 py-4 text-sm font-mono text-muted-foreground" data-mock="true">789012</td>
+                                <td class="px-6 py-4 text-sm font-medium" data-mock="true">Advanced Breathing Techniques</td>
+                                <td class="px-6 py-4 text-sm text-muted-foreground" data-mock="true">Breathing, Meditation, Health</td>
+                                <td class="px-6 py-4">
+                                    <button class="px-3 py-1 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80 transition-colors">
+                                        <i class="fas fa-closed-captioning mr-1"></i>View
+                                    </button>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <button class="px-3 py-1 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors">
+                                        <i class="fas fa-play mr-1"></i>View
+                                    </button>
+                                </td>
+                            </tr>
+                            <!-- @END_MAP )) -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: VideoTable -->
+        </div>
+        <!-- @END_COMPONENT: DownloadPage -->
+
+        <!-- @COMPONENT: UploadPage -->
+        <div id="upload-page" class="tab-content hidden">
+            <div class="mb-8">
+                <h2 class="text-2xl font-semibold mb-2">Upload Videos</h2>
+                <p class="text-muted-foreground">Upload new videos or replace existing content</p>
+            </div>
+
+            <!-- @COMPONENT: UploadModeSelector -->
+            <div class="flex space-x-4 mb-8">
+                <!-- @STATE: uploadMode:string = 'new' -->
+                <button class="upload-mode-btn active px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium"
+                        data-event="click:setUploadMode('new')"
+                        data-mode="new">
+                    <i class="fas fa-plus mr-2"></i>Upload New Video
+                </button>
+                <button class="upload-mode-btn px-4 py-2 bg-secondary text-secondary-foreground rounded-md font-medium hover:bg-secondary/80"
+                        data-event="click:setUploadMode('replace')"
+                        data-mode="replace">
+                    <i class="fas fa-exchange-alt mr-2"></i>Replace Existing Video
+                </button>
+            </div>
+            <!-- @END_COMPONENT: UploadModeSelector -->
+
+            <!-- @COMPONENT: NewVideoForm -->
+            <div id="new-video-form" class="upload-form bg-card rounded-lg border border-border p-6">
+                <h3 class="text-lg font-medium mb-6">Upload New Video</h3>
+                <form class="space-y-6" data-event="submit:handleNewVideoUpload">
+                    <div>
+                        <label for="new-title" class="block text-sm font-medium mb-2">Video Title</label>
+                        <input type="text" id="new-title" 
+                               class="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                               placeholder="Enter video title" 
+                               data-mock="true" 
+                               required>
+                    </div>
+                    <div>
+                        <label for="new-tags" class="block text-sm font-medium mb-2">Tags</label>
+                        <input type="text" id="new-tags" 
+                               class="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                               placeholder="Enter tags (comma separated)" 
+                               data-mock="true">
+                    </div>
+                    <div>
+                        <label for="new-video-file" class="block text-sm font-medium mb-2">Video File</label>
+                        <div class="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+                            <div class="flex flex-col items-center space-y-3">
+                                <i class="fas fa-cloud-upload-alt text-3xl text-muted-foreground"></i>
+                                <div>
+                                    <p class="text-sm font-medium">Click to upload or drag and drop</p>
+                                    <p class="text-xs text-muted-foreground">MP4 files only, max 2GB</p>
+                                </div>
+                                <input type="file" id="new-video-file" 
+                                       class="hidden" 
+                                       accept=".mp4" 
+                                       data-event="change:handleFileSelect">
+                                <button type="button" 
+                                        class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80"
+                                        data-event="click:triggerFileSelect">
+                                    Select File
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between pt-4">
+                        <button type="submit" 
+                                class="px-6 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                data-implementation="Upload video to Vimeo API">
+                            <i class="fas fa-upload mr-2"></i>Upload Video
+                        </button>
+                        <!-- @COMPONENT: UploadProgress -->
+                        <div class="upload-progress hidden flex items-center space-x-3">
+                            <div class="loading-spinner"></div>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-medium" data-bind="uploadProgress.filename">Uploading...</span>
+                                <div class="w-32 bg-muted rounded-full h-2">
+                                    <div class="bg-primary h-2 rounded-full progress-bar" style="width: 0%" data-bind="uploadProgress.percentage"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_COMPONENT: UploadProgress -->
+                    </div>
+                </form>
+            </div>
+            <!-- @END_COMPONENT: NewVideoForm -->
+
+            <!-- @COMPONENT: ReplaceVideoForm -->
+            <div id="replace-video-form" class="upload-form bg-card rounded-lg border border-border p-6 hidden">
+                <h3 class="text-lg font-medium mb-6">Replace Existing Video</h3>
+                <form class="space-y-6" data-event="submit:handleReplaceVideo">
+                    <div>
+                        <label for="vimeo-id" class="block text-sm font-medium mb-2">Vimeo ID or URL</label>
+                        <input type="text" id="vimeo-id" 
+                               class="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                               placeholder="Enter Vimeo ID or URL" 
+                               data-mock="true" 
+                               required>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="replace-title" class="block text-sm font-medium mb-2">Title (optional)</label>
+                            <input type="text" id="replace-title" 
+                                   class="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                                   placeholder="Leave empty to keep existing" 
+                                   data-mock="true">
+                        </div>
+                        <div>
+                            <label for="replace-tags" class="block text-sm font-medium mb-2">Tags (optional)</label>
+                            <input type="text" id="replace-tags" 
+                                   class="w-full px-3 py-2 bg-input border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                                   placeholder="Leave empty to keep existing" 
+                                   data-mock="true">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="replace-video-file" class="block text-sm font-medium mb-2">New Video File</label>
+                        <div class="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+                            <div class="flex flex-col items-center space-y-3">
+                                <i class="fas fa-cloud-upload-alt text-3xl text-muted-foreground"></i>
+                                <div>
+                                    <p class="text-sm font-medium">Click to upload or drag and drop</p>
+                                    <p class="text-xs text-muted-foreground">MP4 files only, max 2GB</p>
+                                </div>
+                                <input type="file" id="replace-video-file" 
+                                       class="hidden" 
+                                       accept=".mp4">
+                                <button type="button" 
+                                        class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
+                                    Select File
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between pt-4">
+                        <button type="submit" 
+                                class="px-6 py-2 bg-accent text-accent-foreground rounded-md font-medium hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-exchange-alt mr-2"></i>Replace Video
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <!-- @END_COMPONENT: ReplaceVideoForm -->
+        </div>
+        <!-- @END_COMPONENT: UploadPage -->
+    </main>
+
+    <!-- @COMPONENT: CaptionModal -->
+    <div id="caption-modal" class="modal fixed inset-0 bg-black/50 hidden items-center justify-center z-50" data-event="click:closeCaptionModal">
+        <div class="bg-card rounded-lg border border-border w-full max-w-4xl m-6 max-h-[80vh] overflow-hidden" data-event="click.stop">
+            <div class="flex items-center justify-between p-6 border-b border-border">
+                <h3 class="text-lg font-medium">Video Captions</h3>
+                <button class="p-2 hover:bg-muted rounded-md" data-event="click:closeCaptionModal">
+                    <i class="fas fa-times text-muted-foreground"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-6 overflow-auto">
+                <div class="flex space-x-4">
+                    <!-- @STATE: captionFormat:string = 'vtt' -->
+                    <button class="caption-format-btn active px-3 py-1 bg-primary text-primary-foreground rounded text-sm"
+                            data-format="vtt"
+                            data-event="click:setCaptionFormat('vtt')">
+                        VTT Format
+                    </button>
+                    <button class="caption-format-btn px-3 py-1 bg-secondary text-secondary-foreground rounded text-sm hover:bg-secondary/80"
+                            data-format="txt"
+                            data-event="click:setCaptionFormat('txt')">
+                        TXT Format
+                    </button>
+                </div>
+                <div class="bg-muted rounded-lg p-4 h-64 overflow-auto">
+                    <pre class="text-sm font-mono whitespace-pre-wrap" id="caption-content" data-bind="captionContent" data-mock="true">WEBVTT
+
+00:00:00.000 --> 00:00:03.000
+Welcome to today's yoga session.
+
+00:00:03.000 --> 00:00:06.000
+We'll start with some basic breathing exercises.
+
+00:00:06.000 --> 00:00:10.000
+Find a comfortable position and close your eyes.</pre>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80"
+                            data-event="click:closeCaptionModal">
+                        Close
+                    </button>
+                    <button class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                            data-event="click:downloadCaptions"
+                            data-implementation="Download caption file in selected format">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: CaptionModal -->
+
+    <!-- @COMPONENT: VideoModal -->
+    <div id="video-modal" class="modal fixed inset-0 bg-black/50 hidden items-center justify-center z-50" data-event="click:closeVideoModal">
+        <div class="bg-card rounded-lg border border-border w-full max-w-4xl m-6 max-h-[80vh] overflow-hidden" data-event="click.stop">
+            <div class="flex items-center justify-between p-6 border-b border-border">
+                <h3 class="text-lg font-medium" data-bind="selectedVideo.title" data-mock="true">Morning Yoga Routine</h3>
+                <button class="p-2 hover:bg-muted rounded-md" data-event="click:closeVideoModal">
+                    <i class="fas fa-times text-muted-foreground"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- A person doing yoga exercises in a peaceful studio setting -->
+                <div class="bg-muted rounded-lg aspect-video flex items-center justify-center"
+                     data-implementation="Embed Vimeo player here">
+                    <div class="text-center">
+                        <i class="fas fa-play-circle text-6xl text-muted-foreground mb-4"></i>
+                        <p class="text-muted-foreground">Video Player</p>
+                        <p class="text-sm text-muted-foreground">Vimeo player will be embedded here</p>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button class="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80"
+                            data-event="click:closeVideoModal">
+                        Close
+                    </button>
+                    <button class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                            data-event="click:downloadVideo"
+                            data-implementation="Download video file from Vimeo">
+                        <i class="fas fa-download mr-2"></i>Download Video
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: VideoModal -->
+
+    <!-- @COMPONENT: NotificationToast -->
+    <div id="notification-toast" class="fixed top-4 right-4 z-50 hidden">
+        <div class="bg-card border border-border rounded-lg shadow-lg p-4 min-w-[300px]">
+            <div class="flex items-start space-x-3">
+                <div class="notification-icon flex-shrink-0">
+                    <i class="fas fa-check-circle text-green-500"></i>
+                </div>
+                <div class="flex-1">
+                    <p class="font-medium notification-title" data-bind="notification.title">Success</p>
+                    <p class="text-sm text-muted-foreground notification-message" data-bind="notification.message">Operation completed successfully</p>
+                </div>
+                <button class="text-muted-foreground hover:text-foreground" data-event="click:closeNotification">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: NotificationToast -->
+
+    <script>
+        // TODO: Implement Vimeo API integration, state management, and business logic
+        
+        // Navigation functionality
+        (function() {
+            const navTabs = document.querySelectorAll('.nav-tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            navTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const targetTab = tab.dataset.tab;
+                    
+                    // Update nav appearance
+                    navTabs.forEach(t => {
+                        t.classList.remove('active', 'border-primary', 'text-primary');
+                        t.classList.add('border-transparent', 'text-muted-foreground');
+                    });
+                    tab.classList.add('active', 'border-primary', 'text-primary');
+                    tab.classList.remove('border-transparent', 'text-muted-foreground');
+                    
+                    // Show/hide content
+                    tabContents.forEach(content => {
+                        content.classList.add('hidden');
+                    });
+                    document.getElementById(`${targetTab}-page`).classList.remove('hidden');
+                });
+            });
+        })();
+
+        // Upload mode switching
+        (function() {
+            const uploadModeButtons = document.querySelectorAll('.upload-mode-btn');
+            const uploadForms = document.querySelectorAll('.upload-form');
+
+            uploadModeButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const mode = btn.dataset.mode;
+                    
+                    // Update button appearance
+                    uploadModeButtons.forEach(b => {
+                        b.classList.remove('active', 'bg-primary', 'text-primary-foreground');
+                        b.classList.add('bg-secondary', 'text-secondary-foreground');
+                    });
+                    btn.classList.add('active', 'bg-primary', 'text-primary-foreground');
+                    btn.classList.remove('bg-secondary', 'text-secondary-foreground');
+                    
+                    // Show/hide forms
+                    uploadForms.forEach(form => {
+                        form.classList.add('hidden');
+                    });
+                    document.getElementById(`${mode}-video-form`).classList.remove('hidden');
+                });
+            });
+        })();
+
+        // Modal functionality
+        (function() {
+            const modals = document.querySelectorAll('.modal');
+            
+            // Caption modal
+            window.showCaptions = function(videoId) {
+                document.getElementById('caption-modal').classList.remove('hidden');
+                document.getElementById('caption-modal').classList.add('flex');
+                // TODO: Fetch captions from Vimeo API
+            };
+
+            window.closeCaptionModal = function() {
+                document.getElementById('caption-modal').classList.add('hidden');
+                document.getElementById('caption-modal').classList.remove('flex');
+            };
+
+            // Video modal
+            window.showVideo = function(videoId) {
+                document.getElementById('video-modal').classList.remove('hidden');
+                document.getElementById('video-modal').classList.add('flex');
+                // TODO: Load Vimeo player
+            };
+
+            window.closeVideoModal = function() {
+                document.getElementById('video-modal').classList.add('hidden');
+                document.getElementById('video-modal').classList.remove('flex');
+            };
+
+            // Caption format switching
+            const captionFormatButtons = document.querySelectorAll('.caption-format-btn');
+            captionFormatButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const format = btn.dataset.format;
+                    
+                    captionFormatButtons.forEach(b => {
+                        b.classList.remove('active', 'bg-primary', 'text-primary-foreground');
+                        b.classList.add('bg-secondary', 'text-secondary-foreground');
+                    });
+                    btn.classList.add('active', 'bg-primary', 'text-primary-foreground');
+                    btn.classList.remove('bg-secondary', 'text-secondary-foreground');
+                    
+                    // TODO: Convert and display captions in selected format
+                });
+            });
+        })();
+
+        // File upload handling
+        (function() {
+            const fileInputs = document.querySelectorAll('input[type="file"]');
+            
+            fileInputs.forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        // TODO: Validate file type and size
+                        // TODO: Show upload progress
+                        console.log('File selected:', file.name);
+                    }
+                });
+            });
+
+            // Trigger file selection
+            document.querySelectorAll('[data-event*="triggerFileSelect"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const fileInput = btn.closest('div').querySelector('input[type="file"]');
+                    fileInput.click();
+                });
+            });
+        })();
+
+        // Form submission handling
+        (function() {
+            const forms = document.querySelectorAll('form');
+            
+            forms.forEach(form => {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    // TODO: Implement form validation and API calls
+                    console.log('Form submitted:', form.id);
+                });
+            });
+        })();
+
+        // Notification system
+        (function() {
+            window.showNotification = function(title, message, type = 'success') {
+                const toast = document.getElementById('notification-toast');
+                const icon = toast.querySelector('.notification-icon i');
+                const titleEl = toast.querySelector('.notification-title');
+                const messageEl = toast.querySelector('.notification-message');
+                
+                // Update content
+                titleEl.textContent = title;
+                messageEl.textContent = message;
+                
+                // Update icon based on type
+                icon.className = type === 'success' ? 'fas fa-check-circle text-green-500' :
+                                type === 'error' ? 'fas fa-exclamation-circle text-red-500' :
+                                'fas fa-info-circle text-blue-500';
+                
+                // Show toast
+                toast.classList.remove('hidden');
+                
+                // Auto-hide after 5 seconds
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 5000);
+            };
+
+            window.closeNotification = function() {
+                document.getElementById('notification-toast').classList.add('hidden');
+            };
+        })();
+
+        // Initialize app
+        (function() {
+            console.log('Vimeo Manager initialized');
+            // TODO: Initialize Vimeo API connection
+            // TODO: Load user folders and videos
+        })();
+    </script>
+</body>
+</html>

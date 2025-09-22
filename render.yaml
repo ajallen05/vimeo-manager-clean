@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: vimeo-manager
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: PUBLIC_BASE_URL
+        fromService:
+          type: web
+          name: vimeo-manager
+          property: host
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=512

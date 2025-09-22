@@ -1,0 +1,78 @@
+# Dependencies
+node_modules
+package-lock.json
+
+# Build outputs
+dist
+.vite
+.cache
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Database files (for development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads directory (user uploaded content)
+uploads/
+
+# Vimeo config (API credentials)
+vimeo_config.json
+
+# Python files (not needed for web app)
+*.py
+*.pyc
+__pycache__/
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# Excel/CSV exports
+*.xlsx
+*.xls
+*.csv
