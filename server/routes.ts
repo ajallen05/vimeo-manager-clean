@@ -540,15 +540,12 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       const credentials = await getVimeoCredentials();
       const uploader = new VimeoUploader(credentials.accessToken);
       
-      // First try the videos endpoint
-      const response = await vimeoFetch(
-        `https://api.vimeo.com/me/projects/${folderId}/videos?fields=uri,name,description,duration,created_time,modified_time,pictures.sizes,stats,metadata,privacy,files,download,embed,tags`, 
-        {},
-        credentials
-      );
+      // 🚀 FIXED: Use the existing fetchAllPages function to get ALL videos with pagination
+      const baseUrl = `https://api.vimeo.com/me/projects/${folderId}/videos?fields=uri,name,description,duration,created_time,modified_time,pictures.sizes,stats,metadata,privacy,files,download,embed,tags`;
+      const allVideos = await fetchAllPages(baseUrl, credentials);
 
-      const data = await response.json();
-      const videos = data.data.map((video: any) => ({
+      // Process the videos (note: allVideos is already the array, not data.data)
+      const videos = allVideos.map((video: any) => ({
         id: video.uri.split('/').pop(),
         uri: video.uri,
         name: video.name,
