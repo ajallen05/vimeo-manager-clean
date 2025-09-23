@@ -216,7 +216,7 @@ export function registerExportRoutes(app: Express) {
       let errorCount = 0;
 
       // Process videos in batches to avoid rate limiting
-      const BATCH_SIZE = 3;
+      const BATCH_SIZE = 8; // 🚀 OPTIMIZED: Increased from 3 to 8
       const batches = [];
       for (let i = 0; i < videoIds.length; i += BATCH_SIZE) {
         batches.push(videoIds.slice(i, i + BATCH_SIZE));
@@ -335,10 +335,10 @@ export function registerExportRoutes(app: Express) {
           }
         }
         
-        // Add delay between batches to avoid rate limiting
+        // 🚀 OPTIMIZED: Reduced delay between batches
         if (batchIndex < batches.length - 1) {
-          console.log('Waiting 1 second before next batch...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log('Waiting 300ms before next batch...');
+          await new Promise(resolve => setTimeout(resolve, 300)); // Reduced from 1000ms to 300ms
         }
       }
 

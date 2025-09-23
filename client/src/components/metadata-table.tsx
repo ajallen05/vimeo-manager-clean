@@ -235,27 +235,49 @@ export default function MetadataTable({ videos, isLoading }: MetadataTableProps)
             
             <div className="w-px h-6 bg-gray-200" />
             
-            <Button
-              onClick={handleExportExcel}
-              disabled={exportingExcel}
-              variant="outline"
-              size="sm"
-              className="gap-2 border-green-300 text-green-700 hover:border-green-400 hover:bg-green-50 font-medium"
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              {exportingExcel ? "Exporting..." : "Excel"}
-            </Button>
+        <Button
+          onClick={handleExportExcel}
+          disabled={exportingExcel}
+          variant="outline"
+          size="sm"
+          className="gap-2 border-green-300 text-green-700 hover:border-green-400 hover:bg-green-50 font-medium"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          {exportingExcel ? "Exporting..." : "Excel"}
+        </Button>
+        
+        <Button
+          onClick={() => handleExportOptimized('excel')}
+          disabled={exportingExcel}
+          variant="outline"
+          size="sm"
+          className="gap-2 border-orange-300 text-orange-700 hover:border-orange-400 hover:bg-orange-50 font-medium"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          🚀 Fast Excel
+        </Button>
             
-            <Button
-              onClick={handleExportCsv}
-              disabled={exportingCsv}
-              variant="outline"
-              size="sm"
-              className="gap-2 border-blue-300 text-blue-700 hover:border-blue-400 hover:bg-blue-50"
-            >
-              <FileText className="h-4 w-4" />
-              {exportingCsv ? "Exporting..." : "CSV"}
-            </Button>
+        <Button
+          onClick={handleExportCsv}
+          disabled={exportingCsv}
+          variant="outline"
+          size="sm"
+          className="gap-2 border-blue-300 text-blue-700 hover:border-blue-400 hover:bg-blue-50"
+        >
+          <FileText className="h-4 w-4" />
+          {exportingCsv ? "Exporting..." : "CSV"}
+        </Button>
+        
+        <Button
+          onClick={() => handleExportOptimized('csv')}
+          disabled={exportingCsv}
+          variant="outline"
+          size="sm"
+          className="gap-2 border-purple-300 text-purple-700 hover:border-purple-400 hover:bg-purple-50"
+        >
+          <FileText className="h-4 w-4" />
+          🚀 Fast CSV
+        </Button>
           </div>
         </div>
       </CardHeader>

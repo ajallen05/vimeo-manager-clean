@@ -14,6 +14,7 @@ import { VimeoUploader, type VimeoVideo } from "./vimeo";
 import { z } from "zod";
 import archiver from "archiver";
 import ExcelJS from 'exceljs';
+import { registerOptimizedExportRoutes } from './export-routes-optimized';
 import fs from "fs/promises"; // Unified import for fs promises
 import { registerExportRoutes } from "./export-routes";
 
@@ -158,8 +159,9 @@ export default async function registerRoutes(app: Express): Promise<Server> {
   app.use(errorHandler);
   const httpServer = createServer(app);
 
-  // Register export routes
+  // Register export routes (both original and optimized)
   registerExportRoutes(app);
+  registerOptimizedExportRoutes(app);
 
   // Upload new video with improved error handling and logging
   app.post("/api/videos/upload", upload.single("video"), async (req: FileRequest, res: ExpressResponse) => {
@@ -1123,7 +1125,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       let errorCount = 0;
       
       // Process videos with same batching logic as Excel export
-      const BATCH_SIZE = 3;
+      const BATCH_SIZE = 8; // 🚀 OPTIMIZED: Increased from 3 to 8
       const batches = [];
       for (let i = 0; i < videoIds.length; i += BATCH_SIZE) {
         batches.push(videoIds.slice(i, i + BATCH_SIZE));
@@ -1261,9 +1263,10 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Add delay between batches
+        // 🚀 OPTIMIZED: Reduced delay between batches  
         if (batchIndex < batches.length - 1) {
-          console.log('Waiting 1 second before next batch...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log('Waiting 300ms before next batch...');
+          await new Promise(resolve => setTimeout(resolve, 300)); // Reduced from 1000ms to 300ms
         }
       }
       
