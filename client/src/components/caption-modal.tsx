@@ -17,11 +17,26 @@ type CaptionFormat = "vtt" | "txt";
 
 export default function CaptionModal({ video, open, onOpenChange }: CaptionModalProps) {
   const [captionFormat, setCaptionFormat] = useState<CaptionFormat>("vtt");
+  
+  // Reset format when modal opens
+  useEffect(() => {
+    if (open) {
+      setCaptionFormat("vtt");
+    }
+  }, [open]);
 
   const { data: caption, isLoading, error } = useQuery({
     queryKey: ["/api/videos", video.id, "captions"],
     queryFn: () => fetchVideoCaptions(video.id),
     enabled: open,
+  });
+
+  // Debug logging
+  console.log('Caption Modal Debug:', {
+    captionFormat,
+    caption,
+    vttContent: caption?.vttContent,
+    txtContent: caption?.txtContent
   });
 
   const handleDownload = () => {
@@ -30,7 +45,9 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
     const content = captionFormat === "vtt" ? caption.vttContent : caption.txtContent;
     const filename = `${video.name}_captions.${captionFormat}`;
     
-    const blob = new Blob([content || ""], { type: "text/plain" });
+    // Use appropriate MIME type for VTT files
+    const mimeType = captionFormat === "vtt" ? "text/vtt" : "text/plain";
+    const blob = new Blob([content || ""], { type: mimeType });
     const url = URL.createObjectURL(blob);
     
     const a = document.createElement("a");
@@ -50,7 +67,7 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>Video Captions</DialogTitle>
+          <DialogTitle>Video Captions - Format: {captionFormat.toUpperCase()}</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
@@ -58,20 +75,34 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
             <Button
               variant={captionFormat === "vtt" ? "default" : "secondary"}
               size="sm"
-              onClick={() => setCaptionFormat("vtt")}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('VTT button clicked, current format:', captionFormat);
+                setCaptionFormat("vtt");
+                console.log('VTT button clicked, should be vtt now');
+              }}
               data-testid="format-vtt"
+              disabled={isLoading}
             >
               <Subtitles className="w-4 h-4 mr-1" />
-              VTT Format
+              VTT Format {captionFormat === "vtt" && "✓"}
             </Button>
             <Button
               variant={captionFormat === "txt" ? "default" : "secondary"}
               size="sm"
-              onClick={() => setCaptionFormat("txt")}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('TXT button clicked, current format:', captionFormat);
+                setCaptionFormat("txt");
+                console.log('TXT button clicked, should be txt now');
+              }}
               data-testid="format-txt"
+              disabled={isLoading}
             >
               <FileText className="w-4 h-4 mr-1" />
-              TXT Format
+              TXT Format {captionFormat === "txt" && "✓"}
             </Button>
           </div>
 
@@ -91,9 +122,14 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
                 No captions available for this video.
               </div>
             ) : (
-              <pre className="text-sm font-mono whitespace-pre-wrap" data-testid="caption-content">
-                {displayContent}
-              </pre>
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Showing: {captionFormat.toUpperCase()} format | Length: {displayContent.length} chars
+                </div>
+                <pre className="text-sm font-mono whitespace-pre-wrap" data-testid="caption-content">
+                  {displayContent}
+                </pre>
+              </div>
             )}
           </div>
 

@@ -121,7 +121,17 @@ export type InsertVimeoVideo = z.infer<typeof insertVimeoVideoSchema>;
 export type VimeoVideo = typeof vimeoVideos.$inferSelect;
 
 export type InsertVideoCaption = z.infer<typeof insertVideoCaptionSchema>;
-export type VideoCaption = typeof videoCaptions.$inferSelect;
+export type VideoCaption = typeof videoCaptions.$inferSelect & {
+  tracks?: Array<{
+    id: string;
+    language: string;
+    name: string;
+    type: string;
+    link: string;
+    active: boolean;
+    default: boolean;
+  }>;
+};
 
 export type UploadVideo = z.infer<typeof uploadVideoSchema>;
 export type ReplaceVideo = z.infer<typeof replaceVideoSchema>;

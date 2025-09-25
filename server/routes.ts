@@ -106,6 +106,49 @@ async function vimeoFetch(
   }
 }
 
+// Helper function to convert VTT content to plain text
+function convertVttToText(vttContent: string): string {
+  if (!vttContent) return '';
+  
+  // Simple approach: remove VTT formatting and keep only text content
+  const lines = vttContent.split('\n');
+  const textLines: string[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // Skip empty lines
+    if (!trimmed) continue;
+    
+    // Skip VTT header
+    if (trimmed.startsWith('WEBVTT')) continue;
+    
+    // Skip metadata lines
+    if (trimmed.startsWith('NOTE') || trimmed.startsWith('STYLE') || trimmed.startsWith('REGION')) continue;
+    
+    // Skip cue numbers (just numbers)
+    if (/^\d+$/.test(trimmed)) continue;
+    
+    // Skip timestamp lines (contain -->)
+    if (trimmed.includes('-->')) continue;
+    
+    // This should be caption text - clean it up
+    const cleanText = trimmed
+      .replace(/<[^>]*>/g, '') // Remove HTML/VTT tags
+      .replace(/&lt;/g, '<')   // Decode HTML entities
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .trim();
+    
+    if (cleanText) {
+      textLines.push(cleanText);
+    }
+  }
+  
+  return textLines.join('\n').trim();
+}
+
 // Type for video metadata row
 interface VideoMetadataRow {
   id: string;
@@ -510,18 +553,56 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         credentials
       );
       const data = await response.json();
-      const captions = data.data.map((track: any) => ({
-        id: track.uri.split("/").pop(),
-        language: track.language,
-        name: track.name,
-        type: track.type,
-        link: track.link,
-        active: track.active,
-      }));
-      res.json({
-        message: "Captions fetched successfully",
-        captions,
-      });
+      const tracks = Array.isArray(data.data) ? data.data : [];
+
+      if (tracks.length === 0) {
+        res.json(null);
+        return;
+      }
+
+      // Get the default track or first available track
+      const defaultTrack = tracks.find((t: any) => t.default) || tracks[0];
+      
+      if (!defaultTrack?.link) {
+        res.json(null);
+        return;
+      }
+
+      // Fetch the actual caption content from Vimeo
+      let vttContent = '';
+      let txtContent = '';
+      
+      try {
+        const captionContentResponse = await fetch(defaultTrack.link);
+        if (captionContentResponse.ok) {
+          vttContent = await captionContentResponse.text();
+          
+          // Convert VTT to plain text format for txtContent
+          txtContent = convertVttToText(vttContent);
+        }
+      } catch (captionError) {
+        console.warn(`Failed to fetch caption content for video ${videoId}:`, captionError);
+      }
+
+      const captionResponse = {
+        id: defaultTrack.uri.split("/").pop(),
+        videoId,
+        language: defaultTrack.language,
+        vttContent: vttContent || null,
+        txtContent: txtContent || null,
+        downloadUrl: defaultTrack.link,
+        tracks: tracks.map((track: any) => ({
+          id: track.uri.split("/").pop(),
+          language: track.language,
+          name: track.name,
+          type: track.type,
+          link: track.link,
+          active: track.active,
+          default: track.default || false,
+        }))
+      };
+
+      res.json(captionResponse);
     } catch (error) {
       console.error(`Error fetching captions for video ${req.params.videoId}:`, error);
       res.status(500).json({ 
