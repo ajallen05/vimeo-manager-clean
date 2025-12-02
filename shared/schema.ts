@@ -37,6 +37,7 @@ export const vimeoVideos = pgTable("vimeo_videos", {
   resolution: text("resolution"),
   fileSize: text("file_size"),
   status: text("status"),
+  presetId: text("preset_id"),
 });
 
 export const videoCaptions = pgTable("video_captions", {
@@ -110,6 +111,38 @@ export const replaceVideoSchema = z.object({
   tags: z.string().optional(),
 });
 
+export const updateVideoSchema = z.object({
+  videoId: z.string().min(1, "Video ID is required"),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  tags: z.string().optional(), // CSV string of tags
+  presetId: z.string().optional(),
+  // Privacy settings
+  privacy: z.enum(["anybody", "nobody", "password", "unlisted", "disable"]).optional(),
+  password: z.string().optional(), // Required if privacy is "password"
+  // Comments
+  commentsEnabled: z.boolean().optional(),
+  // Download permission
+  downloadEnabled: z.boolean().optional(),
+  // Embedding
+  embedDomains: z.string().optional(), // Comma-separated domains or empty for all
+  embedWhitelist: z.boolean().optional(), // true = whitelist, false = blacklist
+  // Player settings (embed)
+  playerColor: z.string().optional(),
+  playbar: z.boolean().optional(),
+  volume: z.boolean().optional(),
+  speed: z.boolean().optional(),
+  autoplay: z.boolean().optional(),
+  loop: z.boolean().optional(),
+  // Thumbnail
+  thumbnailTime: z.number().optional(), // Time in seconds for auto-generated thumbnail
+  thumbnailUri: z.string().optional(), // URI of custom thumbnail
+});
+
+export const bulkUpdateVideoSchema = z.object({
+  updates: z.array(updateVideoSchema),
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -135,6 +168,8 @@ export type VideoCaption = typeof videoCaptions.$inferSelect & {
 
 export type UploadVideo = z.infer<typeof uploadVideoSchema>;
 export type ReplaceVideo = z.infer<typeof replaceVideoSchema>;
+export type UpdateVideo = z.infer<typeof updateVideoSchema>;
+export type BulkUpdateVideo = z.infer<typeof bulkUpdateVideoSchema>;
 
 export type InsertVimeoCredentials = z.infer<
   typeof insertVimeoCredentialsSchema

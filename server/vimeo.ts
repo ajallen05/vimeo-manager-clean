@@ -180,9 +180,9 @@ export class VimeoUploader {
       ? data.description.trim() 
       : null;
 
-    // Process tags - ensure we extract names properly
+    // Process tags - ensure we extract names properly (check both 'name' and 'tag' fields)
     const processedTags = data.tags && Array.isArray(data.tags) 
-      ? data.tags.map((tag: any) => tag.name).filter(Boolean) 
+      ? data.tags.map((tag: any) => tag.name || tag.tag).filter(Boolean) 
       : [];
 
     console.log(`Processed data for video ${videoId}:`, {
@@ -372,7 +372,7 @@ export class VimeoUploader {
             : null;
           
           const processedTags = video.tags && Array.isArray(video.tags) 
-            ? video.tags.map((t: any) => t.name).filter(Boolean)
+            ? video.tags.map((t: any) => t.name || t.tag).filter(Boolean)
             : [];
           
           return {
@@ -840,6 +840,165 @@ export class VimeoUploader {
       }
     } catch (error) {
       console.error("Error verifying tags:", error);
+      return false;
+    }
+  }
+
+  async getAllPresets(): Promise<any[]> {
+    try {
+      const response = await fetch("https://api.vimeo.com/me/presets", {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/vnd.vimeo.*+json;version=3.4",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch presets: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data || [];
+    } catch (error) {
+      console.error("Error fetching presets:", error);
+      throw error;
+    }
+  }
+
+  async applyPresetToVideo(videoId: string, presetId: string): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `https://api.vimeo.com/videos/${videoId}/presets/${presetId}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/vnd.vimeo.*+json;version=3.4",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`Failed to apply preset ${presetId} to video ${videoId}: ${response.status} - ${errorText}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Error applying preset ${presetId} to video ${videoId}:`, error);
+      return false;
+    }
+  }
+
+  async getPresetDetails(presetId: string): Promise<any> {
+    try {
+      const response = await fetch(
+        `https://api.vimeo.com/me/presets/${presetId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/vnd.vimeo.*+json;version=3.4",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch preset details: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching preset details:", error);
+      throw error;
+    }
+  }
+
+  async createPreset(name: string, settings: any): Promise<any> {
+    try {
+      const response = await fetch(
+        `https://api.vimeo.com/me/presets`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/vnd.vimeo.*+json;version=3.4",
+          },
+          body: JSON.stringify({
+            name,
+            ...settings
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to create preset: ${response.status} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error creating preset:", error);
+      throw error;
+    }
+  }
+
+  async deletePreset(presetId: string): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `https://api.vimeo.com/me/presets/${presetId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            Accept: "application/vnd.vimeo.*+json;version=3.4",
+          },
+        }
+      );
+
+      if (!response.ok && response.status !== 204) {
+        const errorText = await response.text();
+        console.warn(`Failed to delete preset ${presetId}: ${response.status} - ${errorText}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Error deleting preset ${presetId}:`, error);
+      return false;
+    }
+  }
+
+  async updateVideoEmbed(videoId: string, embedSettings: any): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `https://api.vimeo.com/videos/${videoId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/vnd.vimeo.*+json;version=3.4",
+          },
+          body: JSON.stringify({
+            embed: embedSettings
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`Failed to update video embed settings: ${response.status} - ${errorText}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`Error updating video embed settings:`, error);
       return false;
     }
   }

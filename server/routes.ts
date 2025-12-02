@@ -6,6 +6,8 @@ import multer from "multer";
 import {
   uploadVideoSchema,
   replaceVideoSchema,
+  updateVideoSchema,
+  bulkUpdateVideoSchema,
   vimeoCredentialsSetupSchema,
   type VimeoCredentials
 } from "@shared/schema";
@@ -177,6 +179,21 @@ function formatDate(date: string | null | undefined): string {
   }
 }
 
+function formatDuration(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '00:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  
+  const mStr = m.toString().padStart(2, '0');
+  const sStr = s.toString().padStart(2, '0');
+  
+  if (h > 0) {
+    return `${h}:${mStr}:${sStr}`;
+  }
+  return `${mStr}:${sStr}`;
+}
+
 // Fixed: Unified getVimeoCredentials function
 async function getVimeoCredentials(): Promise<VimeoCredentials> {
   const credentials = await storage.getActiveCredentials();
@@ -293,13 +310,16 @@ export default async function registerRoutes(app: Express): Promise<Server> {
             name: videoData.name,
             uri: videoData.uri,
             description: videoData.description || null,
-            tags: videoData.tags?.map((tag: any) => tag.name) || [],
+            tags: videoData.tags?.map((tag: any) => tag.name || tag.tag).filter(Boolean) || [],
             folderId: cleanFolderId,
             duration: videoData.duration?.toString() || null,
             downloadUrl:
               videoData.download?.find((d: any) => d.quality === "source")
                 ?.link || null,
             embedHtml: videoData.embed?.html || null,
+            presetId: videoData.embed?.uri && videoData.embed.uri.includes('/presets/')
+              ? videoData.embed.uri.split('/').pop()
+              : null,
             createdAt: new Date(videoData.created_time),
           };
 
@@ -414,6 +434,443 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ error: (error as any).message });
+    }
+  });
+
+  // Get all embed presets
+  app.get("/api/presets", async (req: Request, res: ExpressResponse) => {
+    try {
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      const presets = await uploader.getAllPresets();
+      res.json(presets);
+    } catch (error) {
+      console.error("Error fetching presets:", error);
+      res.status(500).json({ message: "Failed to fetch presets" });
+    }
+  });
+
+  // Get preset details
+  app.get("/api/presets/:presetId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { presetId } = req.params;
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      const preset = await uploader.getPresetDetails(presetId);
+      res.json(preset);
+    } catch (error) {
+      console.error("Error fetching preset details:", error);
+      res.status(500).json({ message: "Failed to fetch preset details" });
+    }
+  });
+
+  // Create a new preset
+  app.post("/api/presets", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { name, settings } = req.body;
+      if (!name) {
+        return res.status(400).json({ message: "Preset name is required" });
+      }
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      const preset = await uploader.createPreset(name, settings || {});
+      res.json(preset);
+    } catch (error) {
+      console.error("Error creating preset:", error);
+      res.status(500).json({ message: "Failed to create preset" });
+    }
+  });
+
+  // Delete a preset
+  app.delete("/api/presets/:presetId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { presetId } = req.params;
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      const success = await uploader.deletePreset(presetId);
+      if (success) {
+        res.json({ message: "Preset deleted successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to delete preset" });
+      }
+    } catch (error) {
+      console.error("Error deleting preset:", error);
+      res.status(500).json({ message: "Failed to delete preset" });
+    }
+  });
+
+  // Apply modified preset to video (create temp preset, apply, delete)
+  app.post("/api/videos/:videoId/apply-modified-preset", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId } = req.params;
+      const { basePresetId, modifications } = req.body;
+      
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+
+      // Step 1: Get the base preset details
+      let baseSettings: any = {};
+      if (basePresetId) {
+        const basePreset = await uploader.getPresetDetails(basePresetId);
+        baseSettings = basePreset.settings || basePreset;
+      }
+
+      // Step 2: Merge modifications with base settings
+      const mergedSettings = {
+        ...baseSettings,
+        ...modifications
+      };
+
+      // Step 3: Create a temporary preset with the merged settings
+      const tempPresetName = `temp_preset_${Date.now()}`;
+      const tempPreset = await uploader.createPreset(tempPresetName, mergedSettings);
+      const tempPresetId = tempPreset.uri.split('/').pop();
+
+      // Step 4: Apply the temporary preset to the video
+      const applySuccess = await uploader.applyPresetToVideo(videoId, tempPresetId);
+
+      // Step 5: Delete the temporary preset
+      await uploader.deletePreset(tempPresetId);
+
+      if (applySuccess) {
+        res.json({ 
+          message: "Modified preset applied successfully",
+          appliedSettings: mergedSettings
+        });
+      } else {
+        res.status(500).json({ message: "Failed to apply modified preset" });
+      }
+    } catch (error) {
+      console.error("Error applying modified preset:", error);
+      res.status(500).json({ 
+        message: "Failed to apply modified preset",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Update video embed settings directly (without preset)
+  app.patch("/api/videos/:videoId/embed", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId } = req.params;
+      const embedSettings = req.body;
+      
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      
+      const success = await uploader.updateVideoEmbed(videoId, embedSettings);
+      
+      if (success) {
+        res.json({ message: "Embed settings updated successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to update embed settings" });
+      }
+    } catch (error) {
+      console.error("Error updating embed settings:", error);
+      res.status(500).json({ message: "Failed to update embed settings" });
+    }
+  });
+
+  // Get single video details (for metadata viewer)
+  app.get("/api/videos/:videoId/details", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId } = req.params;
+      const credentials = await getVimeoCredentials();
+
+      const response = await vimeoFetch(
+        `https://api.vimeo.com/videos/${videoId}?fields=uri,name,description,tags,duration,created_time,modified_time,pictures.sizes,stats,metadata,privacy,files,download,embed,status`,
+        {},
+        credentials
+      );
+
+      const video = await response.json();
+
+      const videoDetails = {
+        id: video.uri.split('/').pop(),
+        name: video.name,
+        description: video.description || null,
+        tags: video.tags?.map((tag: any) => tag.name || tag.tag).filter(Boolean) || [],
+        duration: video.duration || 0,
+        created_time: video.created_time,
+        modified_time: video.modified_time,
+        privacy: video.privacy?.view || 'unknown',
+        views: video.stats?.plays || 0,
+        likes: video.metadata?.connections?.likes?.total || 0,
+        comments: video.metadata?.connections?.comments?.total || 0,
+        resolution: video.files ? `${video.files[0]?.width}x${video.files[0]?.height}` : 'unknown',
+        fileSize: video.files?.[0]?.size || 0,
+        status: video.status || 'unknown',
+        presetId: video.embed?.uri && video.embed.uri.includes('/presets/')
+          ? video.embed.uri.split('/').pop()
+          : null,
+        embedHtml: video.embed?.html || null,
+      };
+
+      res.json(videoDetails);
+    } catch (error) {
+      console.error("Error fetching video details:", error);
+      res.status(500).json({ message: "Failed to fetch video details" });
+    }
+  });
+
+  // Upload custom thumbnail
+  app.post(
+    "/api/videos/:videoId/thumbnail",
+    upload.single("thumbnail"),
+    async (req: FileRequest, res: ExpressResponse) => {
+      const thumbnailFile = req.file;
+      const { videoId } = req.params;
+
+      if (!thumbnailFile) {
+        return res.status(400).json({ message: "No thumbnail file provided" });
+      }
+
+      try {
+        const credentials = await getVimeoCredentials();
+        
+        // Step 1: Create thumbnail upload ticket
+        const ticketResponse = await vimeoFetch(
+          `https://api.vimeo.com/videos/${videoId}/pictures`,
+          {
+            method: "POST",
+            body: JSON.stringify({ active: true })
+          },
+          credentials
+        );
+
+        if (!ticketResponse.ok) {
+          throw new Error(`Failed to create thumbnail ticket: ${await ticketResponse.text()}`);
+        }
+
+        const ticket = await ticketResponse.json();
+        const uploadLink = ticket.link;
+
+        // Step 2: Upload the thumbnail
+        const thumbnailBuffer = fs.readFileSync(thumbnailFile.path);
+        const uploadResponse = await fetch(uploadLink, {
+          method: "PUT",
+          headers: {
+            "Content-Type": thumbnailFile.mimetype,
+          },
+          body: thumbnailBuffer,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload thumbnail: ${uploadResponse.status}`);
+        }
+
+        // Cleanup temp file
+        fs.unlinkSync(thumbnailFile.path);
+
+        res.json({ message: "Thumbnail uploaded successfully", pictureUri: ticket.uri });
+      } catch (error) {
+        console.error("Error uploading thumbnail:", error);
+        if (thumbnailFile?.path && fs.existsSync(thumbnailFile.path)) {
+          fs.unlinkSync(thumbnailFile.path);
+        }
+        res.status(500).json({ message: "Failed to upload thumbnail" });
+      }
+    }
+  );
+
+  // Upload captions/subtitles
+  app.post(
+    "/api/videos/:videoId/captions",
+    upload.single("caption"),
+    async (req: FileRequest, res: ExpressResponse) => {
+      const captionFile = req.file;
+      const { videoId } = req.params;
+      const { language, name } = req.body;
+
+      if (!captionFile) {
+        return res.status(400).json({ message: "No caption file provided" });
+      }
+
+      if (!language) {
+        return res.status(400).json({ message: "Language code is required" });
+      }
+
+      try {
+        const credentials = await getVimeoCredentials();
+        
+        // Step 1: Create text track
+        const trackResponse = await vimeoFetch(
+          `https://api.vimeo.com/videos/${videoId}/texttracks`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              type: "subtitles",
+              language: language,
+              name: name || language
+            })
+          },
+          credentials
+        );
+
+        if (!trackResponse.ok) {
+          throw new Error(`Failed to create text track: ${await trackResponse.text()}`);
+        }
+
+        const track = await trackResponse.json();
+        const uploadLink = track.link;
+
+        // Step 2: Upload the caption file
+        const captionContent = fs.readFileSync(captionFile.path, 'utf-8');
+        const uploadResponse = await fetch(uploadLink, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "text/plain",
+          },
+          body: captionContent,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload caption: ${uploadResponse.status}`);
+        }
+
+        // Cleanup temp file
+        fs.unlinkSync(captionFile.path);
+
+        res.json({ message: "Caption uploaded successfully", trackUri: track.uri });
+      } catch (error) {
+        console.error("Error uploading caption:", error);
+        if (captionFile?.path && fs.existsSync(captionFile.path)) {
+          fs.unlinkSync(captionFile.path);
+        }
+        res.status(500).json({ message: "Failed to upload caption" });
+      }
+    }
+  );
+
+  // Add video to showcase/collection
+  app.post("/api/videos/:videoId/showcases/:showcaseId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId, showcaseId } = req.params;
+      const credentials = await getVimeoCredentials();
+
+      const response = await vimeoFetch(
+        `https://api.vimeo.com/me/albums/${showcaseId}/videos/${videoId}`,
+        { method: "PUT" },
+        credentials
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to add video to showcase: ${await response.text()}`);
+      }
+
+      res.json({ message: "Video added to showcase successfully" });
+    } catch (error) {
+      console.error("Error adding video to showcase:", error);
+      res.status(500).json({ message: "Failed to add video to showcase" });
+    }
+  });
+
+  // Remove video from showcase/collection
+  app.delete("/api/videos/:videoId/showcases/:showcaseId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId, showcaseId } = req.params;
+      const credentials = await getVimeoCredentials();
+
+      const response = await vimeoFetch(
+        `https://api.vimeo.com/me/albums/${showcaseId}/videos/${videoId}`,
+        { method: "DELETE" },
+        credentials
+      );
+
+      if (!response.ok && response.status !== 204) {
+        throw new Error(`Failed to remove video from showcase: ${await response.text()}`);
+      }
+
+      res.json({ message: "Video removed from showcase successfully" });
+    } catch (error) {
+      console.error("Error removing video from showcase:", error);
+      res.status(500).json({ message: "Failed to remove video from showcase" });
+    }
+  });
+
+  // Get all showcases/albums
+  app.get("/api/showcases", async (req: Request, res: ExpressResponse) => {
+    try {
+      const credentials = await getVimeoCredentials();
+
+      const response = await vimeoFetch(
+        `https://api.vimeo.com/me/albums?per_page=100`,
+        {},
+        credentials
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch showcases: ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      res.json(data.data || []);
+    } catch (error) {
+      console.error("Error fetching showcases:", error);
+      res.status(500).json({ message: "Failed to fetch showcases" });
+    }
+  });
+
+  // Add chapters to video
+  app.post("/api/videos/:videoId/chapters", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId } = req.params;
+      const { chapters } = req.body; // Array of { time: number, title: string }
+      const credentials = await getVimeoCredentials();
+
+      if (!chapters || !Array.isArray(chapters)) {
+        return res.status(400).json({ message: "Chapters array is required" });
+      }
+
+      const results = [];
+      for (const chapter of chapters) {
+        const response = await vimeoFetch(
+          `https://api.vimeo.com/videos/${videoId}/chapters`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              timecode: chapter.time,
+              title: chapter.title
+            })
+          },
+          credentials
+        );
+
+        if (response.ok) {
+          results.push(await response.json());
+        } else {
+          console.warn(`Failed to add chapter at ${chapter.time}: ${await response.text()}`);
+        }
+      }
+
+      res.json({ message: `Added ${results.length} chapters`, chapters: results });
+    } catch (error) {
+      console.error("Error adding chapters:", error);
+      res.status(500).json({ message: "Failed to add chapters" });
+    }
+  });
+
+  // Get video chapters
+  app.get("/api/videos/:videoId/chapters", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId } = req.params;
+      const credentials = await getVimeoCredentials();
+
+      const response = await vimeoFetch(
+        `https://api.vimeo.com/videos/${videoId}/chapters`,
+        {},
+        credentials
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch chapters: ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      res.json(data.data || []);
+    } catch (error) {
+      console.error("Error fetching chapters:", error);
+      res.status(500).json({ message: "Failed to fetch chapters" });
     }
   });
 
@@ -542,6 +999,237 @@ export default async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Update single video metadata
+  app.patch("/api/videos/:videoId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId } = req.params;
+      const credentials = await getVimeoCredentials();
+      const validation = updateVideoSchema.safeParse({ ...req.body, videoId });
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: "Invalid request data",
+          errors: validation.error.errors,
+        });
+      }
+
+      const { 
+        name, 
+        description, 
+        tags, 
+        presetId,
+        privacy,
+        password,
+        commentsEnabled,
+        downloadEnabled,
+        embedDomains,
+        embedWhitelist,
+        playerColor,
+        playbar,
+        volume,
+        speed,
+        autoplay,
+        loop,
+        thumbnailTime
+      } = validation.data;
+      
+      const updateBody: Record<string, any> = {};
+      
+      // Basic metadata
+      if (name !== undefined) updateBody.name = name;
+      if (description !== undefined) updateBody.description = description;
+      if (tags !== undefined) {
+        updateBody.tags = tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
+
+      // Privacy settings
+      if (privacy !== undefined) {
+        updateBody.privacy = { view: privacy };
+        if (privacy === 'password' && password) {
+          updateBody.privacy.password = password;
+        }
+      }
+
+      // Comments
+      if (commentsEnabled !== undefined) {
+        updateBody.privacy = updateBody.privacy || {};
+        updateBody.privacy.comments = commentsEnabled ? 'anybody' : 'nobody';
+      }
+
+      // Download permission
+      if (downloadEnabled !== undefined) {
+        updateBody.privacy = updateBody.privacy || {};
+        updateBody.privacy.download = downloadEnabled;
+      }
+
+      // Embedding settings
+      if (embedDomains !== undefined || embedWhitelist !== undefined) {
+        updateBody.privacy = updateBody.privacy || {};
+        updateBody.privacy.embed = 'whitelist';
+        if (embedDomains) {
+          updateBody.embed = updateBody.embed || {};
+          updateBody.embed.domains = embedDomains.split(',').map(d => d.trim()).filter(Boolean);
+        }
+      }
+
+      // Player/embed settings
+      if (playerColor !== undefined || playbar !== undefined || volume !== undefined || 
+          speed !== undefined || autoplay !== undefined || loop !== undefined) {
+        updateBody.embed = updateBody.embed || {};
+        if (playerColor !== undefined) updateBody.embed.color = playerColor.replace('#', '');
+        if (playbar !== undefined) updateBody.embed.playbar = playbar;
+        if (volume !== undefined) updateBody.embed.volume = volume;
+        if (speed !== undefined) updateBody.embed.speed = speed;
+        if (autoplay !== undefined) updateBody.embed.autoplay = autoplay;
+        if (loop !== undefined) updateBody.embed.loop = loop;
+      }
+
+      if (Object.keys(updateBody).length === 0 && !presetId && thumbnailTime === undefined) {
+        return res.json({ message: "No changes requested" });
+      }
+
+      let data: any = {};
+
+      if (Object.keys(updateBody).length > 0) {
+        const response = await vimeoFetch(
+          `https://api.vimeo.com/videos/${videoId}`,
+          {
+              method: "PATCH",
+              body: JSON.stringify(updateBody)
+          },
+          credentials
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to update video: ${await response.text()}`);
+        }
+
+        data = await response.json();
+      }
+
+      // Set thumbnail time if specified
+      if (thumbnailTime !== undefined) {
+        const thumbResponse = await vimeoFetch(
+          `https://api.vimeo.com/videos/${videoId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              pictures: {
+                time: thumbnailTime,
+                active: true
+              }
+            })
+          },
+          credentials
+        );
+        
+        if (!thumbResponse.ok) {
+          console.warn(`Failed to set thumbnail time: ${await thumbResponse.text()}`);
+        }
+      }
+
+      if (presetId) {
+        const uploader = new VimeoUploader(credentials.accessToken);
+        await uploader.applyPresetToVideo(videoId, presetId);
+        
+        // If we didn't fetch data yet (because no metadata update), fetch it now
+        if (Object.keys(data).length === 0) {
+           const response = await vimeoFetch(`https://api.vimeo.com/videos/${videoId}`, {}, credentials);
+           data = await response.json();
+        }
+      }
+
+      res.json(data);
+    } catch (error) {
+      console.error("Error updating video:", error);
+      res.status(500).json({ message: "Failed to update video metadata" });
+    }
+  });
+
+  // Bulk update video metadata
+  app.post("/api/videos/bulk-metadata", async (req: Request, res: ExpressResponse) => {
+    try {
+      const credentials = await getVimeoCredentials();
+      const validation = bulkUpdateVideoSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return res.status(400).json({
+          message: "Invalid request data",
+          errors: validation.error.errors,
+        });
+      }
+
+      const { updates } = validation.data;
+      const results = [];
+      const errors = [];
+
+      for (const update of updates) {
+        try {
+          const { videoId, name, description, tags, presetId } = update;
+          const updateBody: Record<string, any> = {};
+          if (name) updateBody.name = name;
+          if (description) updateBody.description = description;
+          if (tags) {
+            updateBody.tags = tags.split(',').map(t => t.trim()).filter(Boolean);
+          }
+
+          if (Object.keys(updateBody).length === 0 && !presetId) {
+             results.push({ videoId, status: "skipped", message: "No changes" });
+             continue;
+          }
+
+          let success = true;
+          let errorMsg = "";
+
+          if (Object.keys(updateBody).length > 0) {
+            const response = await vimeoFetch(
+              `https://api.vimeo.com/videos/${videoId}`,
+              {
+                  method: "PATCH",
+                  body: JSON.stringify(updateBody)
+              },
+              credentials
+            );
+
+             if (!response.ok) {
+               success = false;
+               errorMsg = `Metadata update failed: ${await response.text()}`;
+             }
+          }
+
+          if (success && presetId) {
+             const uploader = new VimeoUploader(credentials.accessToken);
+             const presetSuccess = await uploader.applyPresetToVideo(videoId, presetId);
+             if (!presetSuccess) {
+               success = false;
+               errorMsg = errorMsg ? `${errorMsg}; Preset update failed` : "Preset update failed";
+             }
+          }
+
+           if (success) {
+             results.push({ videoId, status: "success" });
+           } else {
+             errors.push({ videoId, error: errorMsg });
+           }
+        } catch (e) {
+           errors.push({ videoId: update.videoId, error: (e as any).message });
+        }
+      }
+
+      res.json({
+        message: `Processed ${updates.length} updates`,
+        successCount: results.length,
+        errorCount: errors.length,
+        results,
+        errors
+      });
+
+    } catch (error) {
+       console.error("Error bulk updating videos:", error);
+       res.status(500).json({ message: "Failed to bulk update metadata" });
+    }
+  });
+
   // Get video captions
   app.get("/api/videos/:videoId/captions", async (req: Request, res: ExpressResponse) => {
     try {
@@ -626,15 +1314,24 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       const allVideos = await fetchAllPages(baseUrl, credentials);
 
       // Process the videos (note: allVideos is already the array, not data.data)
-      const videos = allVideos.map((video: any) => ({
+      const videos = allVideos.map((video: any, index: number) => {
+        // DEBUG: Log tag structure
+        if (index === 0 && video.tags) {
+          console.log('DEBUG: Raw tags structure:', JSON.stringify(video.tags, null, 2));
+        }
+
+        return {
         id: video.uri.split('/').pop(),
         uri: video.uri,
         name: video.name,
         description: video.description || null,
-        tags: video.tags?.map((tag: any) => tag.name) || [],
+        tags: video.tags?.map((tag: any) => tag.name || tag.tag).filter(Boolean) || [],
         duration: video.duration?.toString() || null,
         downloadUrl: video.download?.find((d: any) => d.quality === 'source')?.link || null,
         embedHtml: video.embed?.html || null,
+        presetId: video.embed?.uri && video.embed.uri.includes('/presets/') 
+          ? video.embed.uri.split('/').pop() 
+          : null,
         created_time: video.created_time,
         modified_time: video.modified_time,
         privacy: video.privacy?.view || 'unknown',
@@ -648,7 +1345,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         status: video.status || 'unknown',
         thumbnailUrl: video.pictures?.sizes?.[0]?.link || null,
         folderId
-      }));
+      }});
 
       console.log(`Found ${videos.length} videos in folder ${folderId}`);
       res.json(videos);
@@ -683,7 +1380,14 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       const { accessToken, clientId, clientSecret } = validation.data;
-      const testResponse = await vimeoFetch("https://api.vimeo.com/me", {}, { accessToken, clientId, clientSecret });
+      const testResponse = await vimeoFetch("https://api.vimeo.com/me", {}, { 
+        accessToken, 
+        clientId, 
+        clientSecret,
+        id: "temp",
+        createdAt: new Date(),
+        isActive: "true"
+      });
       await storage.createCredentials({ accessToken, clientId, clientSecret });
       res.json({ message: "Credentials saved successfully" });
     } catch (error) {
@@ -1191,7 +1895,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       
       // Updated CSV headers with download links
       const headers = [
-        'Video ID', 'Title', 'Description', 'Tags', 'Duration (min)', 
+        'Video ID', 'Title', 'Description', 'Tags', 'Duration', 
         'Created Date', 'Modified Date', 'Privacy', 'Views', 'Likes', 
         'Comments', 'Resolution', 'File Size (MB)', 'Status',
         'Video Download URL', 'Thumbnail Download URL', 'Caption Download URL',
@@ -1306,7 +2010,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
                 escapeCSV(video.name || ''),
                 escapeCSV(video.description || ''),
                 escapeCSV(Array.isArray(video.tags) ? video.tags.join(', ') : video.tags || ''),
-                Math.round((typeof video.duration === 'number' ? video.duration : 0) / 60),
+                escapeCSV(formatDuration(typeof video.duration === 'number' ? video.duration : 0)),
                 escapeCSV(video.created_time || ''),
                 escapeCSV(video.modified_time || ''),
                 escapeCSV(video.privacy || ''),
@@ -1611,6 +2315,9 @@ export default async function registerRoutes(app: Express): Promise<Server> {
     req.setTimeout(0);
     res.setTimeout(0);
     
+    let isClientDisconnected = false;
+    let archive: any = null; // Declare outside try for finally access
+
     try {
       const { videoIds, quality } = req.body as { videoIds: string[]; quality?: 'source' | 'hd' | 'sd' };
       
@@ -1624,7 +2331,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       
       // New approach: Download to memory first, then send complete archive
       const archiver = require('archiver');
-      const archive = archiver('zip', { 
+      archive = archiver('zip', { 
         zlib: { level: 1 },  // Minimal compression for speed
       });
       

@@ -40,95 +40,7 @@ interface MetadataTableProps {
 export default function MetadataTable({ videos, isLoading }: MetadataTableProps) {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
-  const [refreshingCache, setRefreshingCache] = useState(false);
-  // Removed thumbnail and caption modal states since they're no longer used in the frontend view
-  // const [showThumbnailModal, setShowThumbnailModal] = useState(false);
-  // const [showCaptionModal, setShowCaptionModal] = useState(false);
-  // const [selectedVideo, setSelectedVideo] = useState<any>(null);
-  // const [captionContent, setCaptionContent] = useState<string>("");
-  // const [loadingCaption, setLoadingCaption] = useState(false);
   const { toast } = useToast();
-
-  const handleGlobalCacheRefresh = async () => {
-    setRefreshingCache(true);
-    
-    try {
-      const currentTime = Date.now();
-      
-      // Apply cache-busting version to ALL videos (including legacy replaced ones)
-      videos.forEach(video => {
-        localStorage.setItem(`video-cache-version-${video.id}`, currentTime.toString());
-      });
-      
-      toast({
-        title: "Cache Refreshed",
-        description: `Updated cache for ${videos.length} videos. Thumbnails and captions will now show fresh content.`,
-      });
-      
-      // Force a page reload to apply changes immediately
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Failed to refresh cache:', error);
-      toast({
-        title: "Refresh Failed",
-        description: "Failed to refresh cache. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setRefreshingCache(false);
-    }
-  };
-
-  // Removed preview functions since columns are no longer displayed in frontend view
-  // These functions are kept for potential future use but commented out
-  /*
-  const handleViewThumbnail = (video: any) => {
-    setSelectedVideo(video);
-    setShowThumbnailModal(true);
-  };
-
-  const handleViewCaption = async (video: any) => {
-    setSelectedVideo(video);
-    setShowCaptionModal(true);
-    setLoadingCaption(true);
-    setCaptionContent("");
-
-    try {
-      const cacheVersion = localStorage.getItem(`video-cache-version-${video.id}`);
-      const versionParam = cacheVersion ? `?v=${cacheVersion}` : '';
-      
-      const response = await fetch(`/api/videos/${video.id}/captions.txt${versionParam}`);
-      if (response.ok) {
-        const text = await response.text();
-        setCaptionContent(text || "No captions available for this video.");
-      } else {
-        setCaptionContent("Failed to load captions for this video.");
-      }
-    } catch (error) {
-      console.error("Error loading captions:", error);
-      setCaptionContent("Error loading captions. Please try again.");
-    } finally {
-      setLoadingCaption(false);
-    }
-  };
-
-  const handleDownloadThumbnail = (video: any) => {
-    const cacheVersion = localStorage.getItem(`video-cache-version-${video.id}`);
-    const versionParam = cacheVersion ? `?v=${cacheVersion}` : '';
-    window.open(`/api/videos/${video.id}/thumbnail${versionParam}`, "_blank");
-  };
-
-  const handleDownloadCaption = (video: any) => {
-    const cacheVersion = localStorage.getItem(`video-cache-version-${video.id}`);
-    const versionParam = cacheVersion ? `?v=${cacheVersion}` : '';
-    window.open(`/api/videos/${video.id}/captions.txt${versionParam}`, "_blank");
-  };
-  */
-
-  // Moved into unified handleExportMetadata function
 
   const handleExportMetadata = async (format: 'excel' | 'csv') => {
     try {
@@ -140,7 +52,8 @@ export default function MetadataTable({ videos, isLoading }: MetadataTableProps)
 
       const videoIds = videos.map(v => v.id);
       
-      const response = await fetch("/api/videos/export-metadata", {
+      // Use optimized endpoint for better performance
+      const response = await fetch("/api/videos/export-metadata-optimized", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -222,62 +135,26 @@ export default function MetadataTable({ videos, isLoading }: MetadataTableProps)
           <CardTitle className="text-2xl font-bold">Video Metadata</CardTitle>
           <div className="flex items-center gap-3">
             <Button
-              onClick={handleGlobalCacheRefresh}
-              disabled={refreshingCache}
+              onClick={handleExportExcel}
+              disabled={exportingExcel}
               variant="outline"
               size="sm"
-              className="gap-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-              title="Refresh thumbnails and captions for all videos"
+              className="gap-2 border-green-300 text-green-700 hover:border-green-400 hover:bg-green-50 font-medium"
             >
-              <RefreshCw className={`h-4 w-4 ${refreshingCache ? 'animate-spin' : ''}`} />
-              {refreshingCache ? "Refreshing..." : "Refresh Cache"}
+              <FileSpreadsheet className="h-4 w-4" />
+              {exportingExcel ? "Exporting..." : "Excel"}
             </Button>
             
-            <div className="w-px h-6 bg-gray-200" />
-            
-        <Button
-          onClick={handleExportExcel}
-          disabled={exportingExcel}
-          variant="outline"
-          size="sm"
-          className="gap-2 border-green-300 text-green-700 hover:border-green-400 hover:bg-green-50 font-medium"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          {exportingExcel ? "Exporting..." : "Excel"}
-        </Button>
-        
-        <Button
-          onClick={() => handleExportOptimized('excel')}
-          disabled={exportingExcel}
-          variant="outline"
-          size="sm"
-          className="gap-2 border-orange-300 text-orange-700 hover:border-orange-400 hover:bg-orange-50 font-medium"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          🚀 Fast Excel
-        </Button>
-            
-        <Button
-          onClick={handleExportCsv}
-          disabled={exportingCsv}
-          variant="outline"
-          size="sm"
-          className="gap-2 border-blue-300 text-blue-700 hover:border-blue-400 hover:bg-blue-50"
-        >
-          <FileText className="h-4 w-4" />
-          {exportingCsv ? "Exporting..." : "CSV"}
-        </Button>
-        
-        <Button
-          onClick={() => handleExportOptimized('csv')}
-          disabled={exportingCsv}
-          variant="outline"
-          size="sm"
-          className="gap-2 border-purple-300 text-purple-700 hover:border-purple-400 hover:bg-purple-50"
-        >
-          <FileText className="h-4 w-4" />
-          🚀 Fast CSV
-        </Button>
+            <Button
+              onClick={handleExportCsv}
+              disabled={exportingCsv}
+              variant="outline"
+              size="sm"
+              className="gap-2 border-blue-300 text-blue-700 hover:border-blue-400 hover:bg-blue-50"
+            >
+              <FileText className="h-4 w-4" />
+              {exportingCsv ? "Exporting..." : "CSV"}
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -291,6 +168,7 @@ export default function MetadataTable({ videos, isLoading }: MetadataTableProps)
                   <th className="text-left p-3 font-semibold text-sm border-b">Title</th>
                   <th className="text-left p-3 font-semibold text-sm border-b">Description</th>
                   <th className="text-left p-3 font-semibold text-sm border-b">Tags</th>
+                  <th className="text-left p-3 font-semibold text-sm border-b">Preset ID</th>
                   <th className="text-left p-3 font-semibold text-sm border-b">Duration</th>
                   <th className="text-left p-3 font-semibold text-sm border-b">Created</th>
                   <th className="text-left p-3 font-semibold text-sm border-b">Privacy</th>
@@ -322,6 +200,9 @@ export default function MetadataTable({ videos, isLoading }: MetadataTableProps)
                           {Array.isArray(video.tags) ? video.tags.join(", ") : video.tags || "No tags"}
                         </p>
                       </div>
+                    </td>
+                    <td className="p-3 text-sm font-mono">
+                      {video.presetId || "N/A"}
                     </td>
                     <td className="p-3 text-sm">
                       {video.duration ? formatDuration(video.duration) : "N/A"}

@@ -30,7 +30,7 @@ import { z } from "zod";
 
 interface UploadFormProps {
   mode: "new" | "replace";
-  folders: VimeoFolder[];
+  folders: { id: string; name: string }[];
 }
 
 const newVideoFormSchema = uploadVideoSchema.extend({
@@ -45,6 +45,7 @@ const newVideoFormSchema = uploadVideoSchema.extend({
 });
 
 const replaceVideoFormSchema = replaceVideoSchema.extend({
+  videoId: z.string().optional(),
   file: z
     .instanceof(File)
     .refine((file) => file.type === "video/mp4", {

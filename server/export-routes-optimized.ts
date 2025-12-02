@@ -196,6 +196,21 @@ function escapeCSV(value: any): string {
   return str;
 }
 
+function formatDuration(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '00:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  
+  const mStr = m.toString().padStart(2, '0');
+  const sStr = s.toString().padStart(2, '0');
+  
+  if (h > 0) {
+    return `${h}:${mStr}:${sStr}`;
+  }
+  return `${mStr}:${sStr}`;
+}
+
 export function registerOptimizedExportRoutes(app: any) {
   app.post('/api/videos/export-metadata-optimized', async (req: any, res: any) => {
     const format = req.body.format || 'excel';
@@ -225,7 +240,7 @@ export function registerOptimizedExportRoutes(app: any) {
       
       // Headers for the export
       const headers = [
-        'Video ID', 'Title', 'Description', 'Tags', 'Duration (min)', 
+        'Video ID', 'Title', 'Description', 'Tags', 'Duration', 
         'Created Date', 'Modified Date', 'Privacy', 'Views', 'Likes', 'Comments',
         'Resolution', 'File Size (MB)', 'Status', 'Video Download',
         format === 'excel' ? 'Thumbnail' : 'Thumbnail Download',
@@ -280,7 +295,7 @@ export function registerOptimizedExportRoutes(app: any) {
             video.name || '',
             video.description || '',
             Array.isArray(video.tags) ? video.tags.join(', ') : video.tags || '',
-            Math.round((typeof video.duration === 'number' ? video.duration : 0) / 60),
+            formatDuration(typeof video.duration === 'number' ? video.duration : 0),
             video.created_time || '',
             video.modified_time || '',
             video.privacy || '',

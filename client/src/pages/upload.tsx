@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import UploadForm from "@/components/upload-form";
-import { Plus, RefreshCw } from "lucide-react";
+import MetadataEditor from "@/components/metadata-editor";
+import MetadataViewer from "@/components/metadata-viewer";
+import { Plus, RefreshCw, Edit, Eye } from "lucide-react";
 import { useFolderOperations } from "@/stores/folderStore";
 
-type UploadMode = "new" | "replace";
+type UploadMode = "new" | "replace" | "metadata" | "view";
 
 export default function Upload() {
   const [uploadMode, setUploadMode] = useState<UploadMode>("new");
@@ -60,7 +62,7 @@ export default function Upload() {
           </div>
           <span>Choose Upload Mode</span>
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* New Upload Mode */}
           <div 
             className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 card-hover ${
@@ -82,14 +84,9 @@ export default function Upload() {
               <div className="flex-1">
                 <h4 className="font-semibold text-lg mb-2">Upload New Video</h4>
                 <p className="text-muted-foreground text-sm mb-4">Upload a completely new video to your Vimeo account with custom metadata and folder organization.</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">New Content</span>
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Metadata</span>
-                  <span className="px-2 py-1 text-xs rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">Folders</span>
-                </div>
               </div>
               {uploadMode === "new" && (
-                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center absolute top-4 right-4">
                   <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                   </svg>
@@ -117,16 +114,75 @@ export default function Upload() {
                 <RefreshCw className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <h4 className="font-semibold text-lg mb-2">Replace Existing Video</h4>
+                <h4 className="font-semibold text-lg mb-2">Replace Existing</h4>
                 <p className="text-muted-foreground text-sm mb-4">Replace the content of an existing video while preserving its URL, views, and engagement metrics.</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 text-xs rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">Keep URL</span>
-                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">Preserve Views</span>
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Quick Update</span>
-                </div>
               </div>
               {uploadMode === "replace" && (
-                <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center absolute top-4 right-4">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Edit Metadata Mode */}
+          <div 
+            className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 card-hover ${
+              uploadMode === "metadata" 
+                ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20 shadow-lg shadow-orange-500/20" 
+                : "border-border hover:border-orange-300 dark:hover:border-orange-700 bg-card/50"
+            }`}
+            onClick={() => setUploadMode("metadata")}
+            data-testid="mode-metadata"
+          >
+            <div className="flex items-start space-x-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                uploadMode === "metadata" 
+                  ? "bg-orange-500 text-white" 
+                  : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+              }`}>
+                <Edit className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-lg mb-2">Edit Metadata</h4>
+                <p className="text-muted-foreground text-sm mb-4">Update titles, descriptions, tags, and presets for single videos or bulk edit via CSV.</p>
+              </div>
+              {uploadMode === "metadata" && (
+                <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center absolute top-4 right-4">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* View Metadata Mode */}
+          <div 
+            className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 card-hover ${
+              uploadMode === "view" 
+                ? "border-green-500 bg-green-50 dark:bg-green-950/20 shadow-lg shadow-green-500/20" 
+                : "border-border hover:border-green-300 dark:hover:border-green-700 bg-card/50"
+            }`}
+            onClick={() => setUploadMode("view")}
+            data-testid="mode-view"
+          >
+            <div className="flex items-start space-x-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                uploadMode === "view" 
+                  ? "bg-green-500 text-white" 
+                  : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+              }`}>
+                <Eye className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-lg mb-2">View Metadata</h4>
+                <p className="text-muted-foreground text-sm mb-4">View detailed metadata and preset information for any video by entering its ID.</p>
+              </div>
+              {uploadMode === "view" && (
+                <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center absolute top-4 right-4">
                   <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                   </svg>
@@ -137,36 +193,61 @@ export default function Upload() {
         </div>
       </div>
 
-      {/* Upload Form */}
+      {/* Content Area */}
       <Card className="border-0 shadow-xl bg-card/50 backdrop-blur-sm animate-slide-in">
         <CardHeader className="pb-6">
           <div className="flex items-center space-x-3">
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
               uploadMode === "new" 
                 ? "bg-gradient-to-br from-blue-500 to-purple-600" 
-                : "bg-gradient-to-br from-purple-500 to-pink-600"
+                : uploadMode === "replace"
+                  ? "bg-gradient-to-br from-purple-500 to-pink-600"
+                  : uploadMode === "metadata"
+                    ? "bg-gradient-to-br from-orange-500 to-red-600"
+                    : "bg-gradient-to-br from-green-500 to-teal-600"
             }`}>
               {uploadMode === "new" ? (
                 <Plus className="w-5 h-5 text-white" />
-              ) : (
+              ) : uploadMode === "replace" ? (
                 <RefreshCw className="w-5 h-5 text-white" />
+              ) : uploadMode === "metadata" ? (
+                <Edit className="w-5 h-5 text-white" />
+              ) : (
+                <Eye className="w-5 h-5 text-white" />
               )}
             </div>
             <div>
               <CardTitle className="text-2xl">
-                {uploadMode === "new" ? "Upload New Video" : "Replace Existing Video"}
+                {uploadMode === "new" 
+                  ? "Upload New Video" 
+                  : uploadMode === "replace" 
+                    ? "Replace Existing Video"
+                    : uploadMode === "metadata"
+                      ? "Edit Metadata"
+                      : "View Metadata"
+                }
               </CardTitle>
               <p className="text-muted-foreground mt-1">
                 {uploadMode === "new" 
                   ? "Fill out the details below to upload your video" 
-                  : "Enter the Vimeo ID and upload your replacement file"
+                  : uploadMode === "replace"
+                    ? "Enter the Vimeo ID and upload your replacement file"
+                    : uploadMode === "metadata"
+                      ? "Manage metadata for one or multiple videos"
+                      : "View detailed metadata and preset information"
                 }
               </p>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <UploadForm mode={uploadMode} folders={folders || []} />
+          {uploadMode === "metadata" ? (
+            <MetadataEditor />
+          ) : uploadMode === "view" ? (
+            <MetadataViewer />
+          ) : (
+            <UploadForm mode={uploadMode as "new" | "replace"} folders={folders || []} />
+          )}
         </CardContent>
       </Card>
     </div>

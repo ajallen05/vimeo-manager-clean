@@ -1,5 +1,5 @@
 // video-table.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -10,7 +10,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Captions, Play, Download, Loader2, FileSpreadsheet, Eye, RefreshCw } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Captions, Play, Download, Loader2, FileSpreadsheet, Eye } from "lucide-react";
 import CaptionModal from "./caption-modal";
 import VideoModal from "./video-modal";
 import MetadataTable from "./metadata-table";
@@ -32,8 +48,24 @@ export default function VideoTable({ videos }: VideoTableProps) {
   const [isDownloadingBulk, setIsDownloadingBulk] = useState(false);
   const [showMetadataTable, setShowMetadataTable] = useState(false);
   const [metadataVideos, setMetadataVideos] = useState<VimeoVideo[]>([]);
-  const [refreshingCache, setRefreshingCache] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+
   const { toast } = useToast();
+
+  // Reset pagination when videos change
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedVideos([]);
+  }, [videos.length, itemsPerPage]); // Reset when video count changes or page size changes
+
+  // Calculate pagination
+  const totalPages = Math.ceil(videos.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentVideos = videos.slice(startIndex, endIndex);
 
   const handleShowCaptions = (videoId: string) => {
     setSelectedVideoId(videoId);
@@ -65,39 +97,6 @@ export default function VideoTable({ videos }: VideoTableProps) {
       : videos;
     setMetadataVideos(videosToShow);
     setShowMetadataTable(true);
-  };
-
-  const handleGlobalCacheRefresh = async () => {
-    setRefreshingCache(true);
-    
-    try {
-      const currentTime = Date.now();
-      
-      // Apply cache-busting version to ALL videos (including legacy replaced ones)
-      videos.forEach(video => {
-        localStorage.setItem(`video-cache-version-${video.id}`, currentTime.toString());
-      });
-      
-      toast({
-        title: "Cache Refreshed",
-        description: `Updated cache for ${videos.length} videos. Thumbnails and captions will now show fresh content.`,
-      });
-      
-      // Force a page reload to apply changes immediately
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Failed to refresh cache:', error);
-      toast({
-        title: "Refresh Failed",
-        description: "Failed to refresh cache. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setRefreshingCache(false);
-    }
   };
 
   const handleBulkDownloadVideos = async (selectedIds: string[] = []) => {
@@ -204,28 +203,11 @@ export default function VideoTable({ videos }: VideoTableProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={handleGlobalCacheRefresh}
-            disabled={refreshingCache}
-            className="gap-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
-            title="Refresh thumbnails and captions for all videos"
-          >
-            {refreshingCache ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            <span className="hidden sm:inline">Refresh Cache</span>
-            <span className="sm:hidden">Cache</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="sm"
             onClick={() => handleShowMetadata(selectedVideos)}
             className="gap-2 border-blue-300 text-blue-700 hover:border-blue-400 hover:bg-blue-50"
           >
             <Eye className="w-4 h-4" />
-            <span className="hidden sm:inline">{selectedVideos.length > 0 ? 'Selected ' : ''}Metadata</span>
+            <span className="hidden sm:inline">{selectedVideos.length > 0 ? 'View Metadata (Selected)' : 'View Metadata'}</span>
             <span className="sm:hidden">Meta</span>
           </Button>
           
@@ -252,8 +234,8 @@ export default function VideoTable({ videos }: VideoTableProps) {
             className="gap-2 border-green-300 text-green-700 hover:border-green-400 hover:bg-green-50"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span className="hidden sm:inline">All Metadata</span>
-            <span className="sm:hidden">All M</span>
+            <span className="hidden sm:inline">View Metadata (All)</span>
+            <span className="sm:hidden">View All</span>
           </Button>
           
           <Button
@@ -292,8 +274,10 @@ export default function VideoTable({ videos }: VideoTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {videos.map((video, index) => {
+              {currentVideos.map((video, index) => {
                 const isSelected = selectedVideos.includes(video.id);
+                // Adjust index for global counting
+                const globalIndex = startIndex + index;
                 return (
                 <TableRow 
                   key={video.id} 
@@ -331,7 +315,7 @@ export default function VideoTable({ videos }: VideoTableProps) {
                         <span className={cn(
                           "text-xs font-bold",
                           isSelected ? "text-white" : "text-blue-600 dark:text-blue-400"
-                        )}>{index + 1}</span>
+                        )}>{globalIndex + 1}</span>
                       </div>
                       <div className="truncate max-w-[100px]" title={video.id}>
                         <span className={cn(
@@ -433,6 +417,85 @@ export default function VideoTable({ videos }: VideoTableProps) {
               )})}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div className="p-4 border-t border-border/20 bg-muted/10">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Show</span>
+              <Select
+                value={itemsPerPage.toString()}
+                onValueChange={(value) => {
+                  setItemsPerPage(Number(value));
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[70px] h-8">
+                  <SelectValue placeholder={itemsPerPage} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value={videos.length.toString()}>All</SelectItem>
+                </SelectContent>
+              </Select>
+              <span>videos per page</span>
+              <span className="ml-4">
+                Showing {startIndex + 1}-{Math.min(endIndex, videos.length)} of {videos.length}
+              </span>
+            </div>
+
+            {totalPages > 1 && (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className={cn("cursor-pointer", currentPage === 1 && "pointer-events-none opacity-50")}
+                    />
+                  </PaginationItem>
+                  
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                    const pageNumber = i + 1;
+                    // Simple pagination logic: show first, last, current, and surrounding
+                    if (
+                      pageNumber === 1 ||
+                      pageNumber === totalPages ||
+                      (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+                    ) {
+                      return (
+                        <PaginationItem key={pageNumber}>
+                          <PaginationLink
+                            isActive={currentPage === pageNumber}
+                            onClick={() => setCurrentPage(pageNumber)}
+                            className="cursor-pointer"
+                          >
+                            {pageNumber}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    } else if (
+                      (pageNumber === currentPage - 2 && currentPage > 3) ||
+                      (pageNumber === currentPage + 2 && currentPage < totalPages - 2)
+                    ) {
+                      return <PaginationItem key={pageNumber}><PaginationEllipsis /></PaginationItem>;
+                    }
+                    return null;
+                  })}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      className={cn("cursor-pointer", currentPage === totalPages && "pointer-events-none opacity-50")}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
+          </div>
         </div>
       </div>
 
