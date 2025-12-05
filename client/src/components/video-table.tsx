@@ -1,5 +1,5 @@
 // video-table.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -67,29 +67,29 @@ export default function VideoTable({ videos }: VideoTableProps) {
   const endIndex = startIndex + itemsPerPage;
   const currentVideos = videos.slice(startIndex, endIndex);
 
-  const handleShowCaptions = (videoId: string) => {
+  const handleShowCaptions = useCallback((videoId: string) => {
     setSelectedVideoId(videoId);
     setShowCaptions(true);
-  };
+  }, []);
 
-  const handleShowVideo = (videoId: string) => {
+  const handleShowVideo = useCallback((videoId: string) => {
     setSelectedVideoId(videoId);
     setShowVideo(true);
-  };
+  }, []);
 
-  const handleToggleSelect = (videoId: string) => {
+  const handleToggleSelect = useCallback((videoId: string) => {
     setSelectedVideos((prev) =>
       prev.includes(videoId)
         ? prev.filter((id) => id !== videoId)
         : [...prev, videoId]
     );
-  };
+  }, []);
 
-  const handleToggleSelectAll = () => {
+  const handleToggleSelectAll = useCallback(() => {
     setSelectedVideos((prev) =>
       prev.length === videos.length ? [] : videos.map((v) => v.id)
     );
-  };
+  }, [videos]);
 
   const handleShowMetadata = (selectedIds: string[] = []) => {
     const videosToShow = selectedIds.length 

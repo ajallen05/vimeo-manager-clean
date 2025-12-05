@@ -31,13 +31,7 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
     enabled: open,
   });
 
-  // Debug logging
-  console.log('Caption Modal Debug:', {
-    captionFormat,
-    caption,
-    vttContent: caption?.vttContent,
-    txtContent: caption?.txtContent
-  });
+  // Debug logging removed for production - use React DevTools instead
 
   const handleDownload = () => {
     if (!caption) return;
@@ -75,31 +69,21 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
             <Button
               variant={captionFormat === "vtt" ? "default" : "secondary"}
               size="sm"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('VTT button clicked, current format:', captionFormat);
-                setCaptionFormat("vtt");
-                console.log('VTT button clicked, should be vtt now');
-              }}
+              onClick={() => setCaptionFormat("vtt")}
               data-testid="format-vtt"
               disabled={isLoading}
+              aria-pressed={captionFormat === "vtt"}
             >
-              <Subtitles className="w-4 h-4 mr-1" />
+              <Subtitles className="w-4 h-4 mr-1" aria-hidden="true" />
               VTT Format {captionFormat === "vtt" && "✓"}
             </Button>
             <Button
               variant={captionFormat === "txt" ? "default" : "secondary"}
               size="sm"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('TXT button clicked, current format:', captionFormat);
-                setCaptionFormat("txt");
-                console.log('TXT button clicked, should be txt now');
-              }}
+              onClick={() => setCaptionFormat("txt")}
               data-testid="format-txt"
               disabled={isLoading}
+              aria-pressed={captionFormat === "txt"}
             >
               <FileText className="w-4 h-4 mr-1" />
               TXT Format {captionFormat === "txt" && "✓"}

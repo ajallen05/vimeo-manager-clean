@@ -1,25 +1,33 @@
 import { Switch, Route } from "wouter";
+import { lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import Download from "@/pages/download";
-import Upload from "@/pages/upload";
-import Setup from "@/pages/setup";
 import Navigation from "@/components/navigation";
 import { checkCredentials } from "@/lib/vimeo-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import FolderCacheInitializer from "@/components/folder-cache-initializer";
+import { ErrorBoundary, LoadingFallback } from "@/components/error-boundary";
+
+// Lazy load pages for better initial load performance
+const Download = lazy(() => import("@/pages/download"));
+const Upload = lazy(() => import("@/pages/upload"));
+const Setup = lazy(() => import("@/pages/setup"));
+const NotFound = lazy(() => import("@/pages/not-found"));
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Download} />
-      <Route path="/download" component={Download} />
-      <Route path="/upload" component={Upload} />
-      <Route component={NotFound} />
-    </Switch>
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingFallback />}>
+        <Switch>
+          <Route path="/" component={Download} />
+          <Route path="/download" component={Download} />
+          <Route path="/upload" component={Upload} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -47,7 +55,13 @@ function AppContent() {
   }
 
   if (!credentialsCheck?.configured) {
-    return <Setup onSetupComplete={handleSetupComplete} />;
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingFallback />}>
+          <Setup onSetupComplete={handleSetupComplete} />
+        </Suspense>
+      </ErrorBoundary>
+    );
   }
 
   return (

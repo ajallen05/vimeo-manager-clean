@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { Search, FolderOpen, Eye, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useFolderOperations } from "@/stores/folderStore";
+import { useDebounce } from "@/hooks/use-debounce";
 
 interface Folder {
   id: string;
@@ -19,12 +20,15 @@ interface SearchableFolderSelectorProps {
   selectedFolderId?: string;
 }
 
-export default function SearchableFolderSelector({ 
+function SearchableFolderSelector({ 
   onFolderSelect, 
   selectedFolderId 
 }: SearchableFolderSelectorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
+  
+  // Debounce search query to prevent excessive filtering on rapid typing
+  const debouncedSearchQuery = useDebounce(searchQuery, 200);
 
   // Use cached folders from store
   const { 
@@ -37,11 +41,11 @@ export default function SearchableFolderSelector({
   
   const error = folderError;
 
-  // Filter folders based on search query using cached search
+  // Filter folders based on debounced search query using cached search
   const filteredFolders = useMemo(() => {
-    if (!searchQuery.trim()) return allFolders;
-    return searchFolders(searchQuery);
-  }, [allFolders, searchQuery, searchFolders]);
+    if (!debouncedSearchQuery.trim()) return allFolders;
+    return searchFolders(debouncedSearchQuery);
+  }, [allFolders, debouncedSearchQuery, searchFolders]);
 
   // Update selected folder when selectedFolderId changes
   useEffect(() => {
@@ -60,7 +64,7 @@ export default function SearchableFolderSelector({
     }
   }, [selectedFolderId, allFolders]);
 
-  const handleFolderClick = (folder: Folder | { id: string; name: string; path?: string; displayName?: string; uri: string }) => {
+  const handleFolderClick = useCallback((folder: Folder | { id: string; name: string; path?: string; displayName?: string; uri: string }) => {
     const mappedFolder: Folder = {
       id: folder.id,
       name: folder.name,
@@ -71,7 +75,7 @@ export default function SearchableFolderSelector({
     setSelectedFolder(mappedFolder);
     onFolderSelect(mappedFolder.id, mappedFolder.name, mappedFolder.path);
     setSearchQuery(""); // Clear search after selection
-  };
+  }, [onFolderSelect]);
 
   if (isLoading) {
     return (
@@ -246,13 +250,13 @@ export default function SearchableFolderSelector({
       )}
 
       {/* Search Info */}
-      {searchQuery && (
+      {debouncedSearchQuery && (
         <p className="text-xs text-muted-foreground">
-          Found {filteredFolders.length} folder{filteredFolders.length !== 1 ? 's' : ''} matching "{searchQuery}"
+          Found {filteredFolders.length} folder{filteredFolders.length !== 1 ? 's' : ''} matching "{debouncedSearchQuery}"
         </p>
       )}
       
-      {!searchQuery && allFolders.length > 0 && (
+      {!debouncedSearchQuery && allFolders.length > 0 && (
         <p className="text-xs text-muted-foreground bg-green-50 dark:bg-green-950/20 p-2 rounded border border-green-200 dark:border-green-800">
           ✅ Loaded {allFolders.length} folders from your entire Vimeo account (including all subfolders)
         </p>
@@ -260,3 +264,5 @@ export default function SearchableFolderSelector({
     </div>
   );
 }
+
+export default memo(SearchableFolderSelector);

@@ -920,6 +920,29 @@ export class VimeoUploader {
 
   async createPreset(name: string, settings: any): Promise<any> {
     try {
+      // Vimeo API expects embed settings in a specific structure
+      const presetBody: any = {
+        name
+      };
+      
+      // Only add non-empty settings
+      if (settings && Object.keys(settings).length > 0) {
+        // Some settings go directly, others might need to be nested
+        if (settings.color) presetBody.color = settings.color;
+        if (settings.colors) presetBody.colors = settings.colors;
+        if (settings.buttons) presetBody.buttons = settings.buttons;
+        if (settings.logos) presetBody.logos = settings.logos;
+        if (settings.outro) presetBody.outro = settings.outro;
+        if (typeof settings.playbar === 'boolean') presetBody.play_bar = settings.playbar;
+        if (typeof settings.volume === 'boolean') presetBody.volume = settings.volume;
+        if (typeof settings.speed === 'boolean') presetBody.speed = settings.speed;
+        if (typeof settings.title === 'boolean' || typeof settings.title === 'object') presetBody.title = settings.title;
+        if (typeof settings.byline === 'boolean' || typeof settings.byline === 'object') presetBody.byline = settings.byline;
+        if (typeof settings.portrait === 'boolean' || typeof settings.portrait === 'object') presetBody.portrait = settings.portrait;
+      }
+
+      console.log("Creating preset with body:", JSON.stringify(presetBody, null, 2));
+
       const response = await fetch(
         `https://api.vimeo.com/me/presets`,
         {
@@ -929,21 +952,68 @@ export class VimeoUploader {
             "Content-Type": "application/json",
             Accept: "application/vnd.vimeo.*+json;version=3.4",
           },
-          body: JSON.stringify({
-            name,
-            ...settings
-          }),
+          body: JSON.stringify(presetBody),
         }
       );
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error("Preset creation failed:", response.status, errorText);
         throw new Error(`Failed to create preset: ${response.status} - ${errorText}`);
       }
 
       return await response.json();
     } catch (error) {
       console.error("Error creating preset:", error);
+      throw error;
+    }
+  }
+
+  async updatePreset(presetId: string, name: string, settings: any): Promise<any> {
+    try {
+      const presetBody: any = {};
+      
+      if (name) presetBody.name = name;
+      
+      // Only add non-empty settings
+      if (settings && Object.keys(settings).length > 0) {
+        if (settings.color) presetBody.color = settings.color;
+        if (settings.colors) presetBody.colors = settings.colors;
+        if (settings.buttons) presetBody.buttons = settings.buttons;
+        if (settings.logos) presetBody.logos = settings.logos;
+        if (settings.outro) presetBody.outro = settings.outro;
+        if (typeof settings.playbar === 'boolean') presetBody.play_bar = settings.playbar;
+        if (typeof settings.volume === 'boolean') presetBody.volume = settings.volume;
+        if (typeof settings.speed === 'boolean') presetBody.speed = settings.speed;
+        if (typeof settings.title === 'boolean' || typeof settings.title === 'object') presetBody.title = settings.title;
+        if (typeof settings.byline === 'boolean' || typeof settings.byline === 'object') presetBody.byline = settings.byline;
+        if (typeof settings.portrait === 'boolean' || typeof settings.portrait === 'object') presetBody.portrait = settings.portrait;
+      }
+
+      console.log("Updating preset with body:", JSON.stringify(presetBody, null, 2));
+
+      const response = await fetch(
+        `https://api.vimeo.com/me/presets/${presetId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            "Content-Type": "application/json",
+            Accept: "application/vnd.vimeo.*+json;version=3.4",
+          },
+          body: JSON.stringify(presetBody),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Preset update failed:", response.status, errorText);
+        throw new Error(`Failed to update preset: ${response.status} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error updating preset:", error);
       throw error;
     }
   }

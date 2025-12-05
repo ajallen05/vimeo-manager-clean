@@ -2,7 +2,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Download, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import type { VimeoVideo } from "@shared/schema";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
+import logger from "@/lib/logger";
 
 interface DownloadLink {
   quality: string;
@@ -16,7 +17,7 @@ interface VideoModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export default function VideoModal({ video, open, onOpenChange }: VideoModalProps) {
+function VideoModal({ video, open, onOpenChange }: VideoModalProps) {
   const [downloadLinks, setDownloadLinks] = useState<DownloadLink[]>([]);
   const [isLoadingLinks, setIsLoadingLinks] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -28,12 +29,12 @@ export default function VideoModal({ video, open, onOpenChange }: VideoModalProp
     }
   }, [open, video.id, video.modifiedAt]); // Re-fetch if modifiedAt changes
 
-  const fetchDownloadLinks = async (forceRefresh = false) => {
+  const fetchDownloadLinks = useCallback(async (forceRefresh = false) => {
     setIsLoadingLinks(true);
     setDownloadError(null);
     
     try {
-      console.log(`Fetching download links for video: ${video.id}${forceRefresh ? ' (forced refresh)' : ''}`);
+      logger.debug(`Fetching download links for video: ${video.id}${forceRefresh ? ' (forced refresh)' : ''}`);
       
       // Add cache-busting if forced refresh or if video was recently replaced
       let url = `/api/videos/${video.id}/download-links`;
@@ -76,19 +77,19 @@ export default function VideoModal({ video, open, onOpenChange }: VideoModalProp
         throw new Error('Invalid JSON response from server');
       }
       
-      console.log('Received download links:', data.downloadLinks);
+      logger.debug('Received download links:', data.downloadLinks);
       setDownloadLinks(data.downloadLinks || []);
     } catch (error) {
-      console.error("Failed to fetch download links:", error);
+      logger.error("Failed to fetch download links:", error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch download links';
       setDownloadError(errorMessage);
     } finally {
       setIsLoadingLinks(false);
     }
-  };
+  }, [video.id]);
 
-  const handleDownload = (quality: "source" | "hd" | "sd") => {
-    console.log(`Initiating download for quality: ${quality}`);
+  const handleDownload = useCallback((quality: "source" | "hd" | "sd") => {
+    logger.debug(`Initiating download for quality: ${quality}`);
     
     // Find the download link for the requested quality
     let downloadLink = downloadLinks.find(link => link.quality === quality);
@@ -118,7 +119,7 @@ export default function VideoModal({ video, open, onOpenChange }: VideoModalProp
       return;
     }
 
-    console.log(`Using direct Vimeo download link: ${downloadLink.link}`);
+    logger.debug(`Using direct Vimeo download link: ${downloadLink.link}`);
     
     // Create a temporary anchor element and trigger download with direct Vimeo link
     const a = document.createElement('a');
@@ -130,16 +131,16 @@ export default function VideoModal({ video, open, onOpenChange }: VideoModalProp
     a.click();
     document.body.removeChild(a);
     
-    console.log(`Direct download initiated for quality: ${downloadLink.quality}`);
-  };
+    logger.debug(`Direct download initiated for quality: ${downloadLink.quality}`);
+  }, [downloadLinks]);
 
-  const getAvailableQuality = (quality: string): DownloadLink | null => {
+  const getAvailableQuality = useCallback((quality: string): DownloadLink | null => {
     return downloadLinks.find(link => link.quality === quality) || null;
-  };
+  }, [downloadLinks]);
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setDownloadError(null);
-  };
+  }, []);
 
   return (
     <>
@@ -314,3 +315,5 @@ export default function VideoModal({ video, open, onOpenChange }: VideoModalProp
     </>
   );
 }
+
+export default memo(VideoModal);

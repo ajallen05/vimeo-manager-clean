@@ -415,6 +415,21 @@ export default async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update an existing preset
+  app.patch("/api/presets/:presetId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { presetId } = req.params;
+      const { name, settings } = req.body;
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      const preset = await uploader.updatePreset(presetId, name, settings || {});
+      res.json(preset);
+    } catch (error) {
+      console.error("Error updating preset:", error);
+      res.status(500).json({ message: "Failed to update preset" });
+    }
+  });
+
   // Delete a preset
   app.delete("/api/presets/:presetId", async (req: Request, res: ExpressResponse) => {
     try {
@@ -433,7 +448,80 @@ export default async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Apply modified preset to video (create temp preset, apply, delete)
+  // Apply a preset directly to a video
+  app.put("/api/videos/:videoId/preset/:presetId", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { videoId, presetId } = req.params;
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      
+      const success = await uploader.applyPresetToVideo(videoId, presetId);
+      
+      if (success) {
+        res.json({ 
+          message: "Preset applied successfully",
+          videoId,
+          presetId
+        });
+      } else {
+        res.status(500).json({ message: "Failed to apply preset to video" });
+      }
+    } catch (error) {
+      console.error("Error applying preset to video:", error);
+      res.status(500).json({ message: "Failed to apply preset to video" });
+    }
+  });
+
+  // Apply a preset to all videos in a folder
+  app.post("/api/folders/apply-preset", async (req: Request, res: ExpressResponse) => {
+    try {
+      const { folderId, presetId, videoIds } = req.body;
+      
+      if (!presetId || !videoIds || videoIds.length === 0) {
+        return res.status(400).json({ message: "Preset ID and video IDs are required" });
+      }
+      
+      const credentials = await getVimeoCredentials();
+      const uploader = new VimeoUploader(credentials.accessToken);
+      
+      const results: any[] = [];
+      const errors: any[] = [];
+      
+      console.log(`Applying preset ${presetId} to ${videoIds.length} videos in folder ${folderId}`);
+      
+      // Process videos sequentially to avoid rate limiting
+      for (const videoId of videoIds) {
+        try {
+          const success = await uploader.applyPresetToVideo(videoId, presetId);
+          if (success) {
+            results.push({ videoId, status: "success" });
+          } else {
+            errors.push({ videoId, error: "Failed to apply preset" });
+          }
+        } catch (error) {
+          errors.push({ videoId, error: (error as Error).message });
+        }
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      
+      console.log(`Folder preset applied: ${results.length} success, ${errors.length} failed`);
+      
+      res.json({
+        message: `Processed ${videoIds.length} videos`,
+        successCount: results.length,
+        errorCount: errors.length,
+        results,
+        errors
+      });
+    } catch (error) {
+      console.error("Error applying preset to folder:", error);
+      res.status(500).json({ message: "Failed to apply preset to folder" });
+    }
+  });
+
+  // Apply modified preset to video - uses direct embed update for reliability
   app.post("/api/videos/:videoId/apply-modified-preset", async (req: Request, res: ExpressResponse) => {
     try {
       const { videoId } = req.params;
@@ -442,42 +530,85 @@ export default async function registerRoutes(app: Express): Promise<Server> {
       const credentials = await getVimeoCredentials();
       const uploader = new VimeoUploader(credentials.accessToken);
 
-      // Step 1: Get the base preset details
-      let baseSettings: any = {};
+      // Step 1: If there's a base preset, apply it first
       if (basePresetId) {
-        const basePreset = await uploader.getPresetDetails(basePresetId);
-        baseSettings = basePreset.settings || basePreset;
+        console.log(`Applying base preset ${basePresetId} to video ${videoId}...`);
+        const presetApplied = await uploader.applyPresetToVideo(videoId, basePresetId);
+        if (!presetApplied) {
+          console.warn("Failed to apply base preset, continuing with modifications...");
+        }
       }
 
-      // Step 2: Merge modifications with base settings
-      const mergedSettings = {
-        ...baseSettings,
-        ...modifications
-      };
+      // Step 2: Apply modifications directly to the video's embed settings
+      if (modifications && Object.keys(modifications).length > 0) {
+        console.log(`Applying embed modifications to video ${videoId}:`, JSON.stringify(modifications, null, 2));
+        
+        // Transform the modifications to Vimeo's expected format
+        const embedSettings: any = {};
+        
+        // Handle buttons
+        if (modifications.buttons) {
+          embedSettings.buttons = modifications.buttons;
+        }
+        
+        // Handle colors - Vimeo expects 'color' not 'colors' for single color
+        if (modifications.color) {
+          embedSettings.color = modifications.color.replace('#', '');
+        }
+        if (modifications.colors?.color_one) {
+          embedSettings.color = modifications.colors.color_one.replace('#', '');
+        }
+        
+        // Handle player controls
+        if (typeof modifications.playbar === 'boolean') {
+          embedSettings.playbar = modifications.playbar;
+        }
+        if (typeof modifications.volume === 'boolean') {
+          embedSettings.volume = modifications.volume;
+        }
+        if (typeof modifications.speed === 'boolean') {
+          embedSettings.speed = modifications.speed;
+        }
+        
+        // Handle title settings
+        if (modifications.title) {
+          embedSettings.title = modifications.title;
+        }
+        
+        // Handle logos
+        if (modifications.logos) {
+          embedSettings.logos = modifications.logos;
+        }
+        
+        // Handle outro
+        if (modifications.outro) {
+          embedSettings.outro = modifications.outro;
+        }
 
-      // Step 3: Create a temporary preset with the merged settings
-      const tempPresetName = `temp_preset_${Date.now()}`;
-      const tempPreset = await uploader.createPreset(tempPresetName, mergedSettings);
-      const tempPresetId = tempPreset.uri.split('/').pop();
-
-      // Step 4: Apply the temporary preset to the video
-      const applySuccess = await uploader.applyPresetToVideo(videoId, tempPresetId);
-
-      // Step 5: Delete the temporary preset
-      await uploader.deletePreset(tempPresetId);
-
-      if (applySuccess) {
+        console.log("Final embed settings to apply:", JSON.stringify(embedSettings, null, 2));
+        
+        const success = await uploader.updateVideoEmbed(videoId, embedSettings);
+        
+        if (success) {
+          res.json({ 
+            message: "Embed settings applied successfully",
+            appliedSettings: embedSettings
+          });
+        } else {
+          res.status(500).json({ message: "Failed to apply embed settings" });
+        }
+      } else if (basePresetId) {
+        // Only base preset was applied
         res.json({ 
-          message: "Modified preset applied successfully",
-          appliedSettings: mergedSettings
+          message: "Base preset applied successfully"
         });
       } else {
-        res.status(500).json({ message: "Failed to apply modified preset" });
+        res.status(400).json({ message: "No preset or modifications provided" });
       }
     } catch (error) {
       console.error("Error applying modified preset:", error);
       res.status(500).json({ 
-        message: "Failed to apply modified preset",
+        message: "Failed to apply settings",
         error: error instanceof Error ? error.message : "Unknown error"
       });
     }

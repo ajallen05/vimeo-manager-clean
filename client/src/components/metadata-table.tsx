@@ -1,43 +1,17 @@
-import { useState } from "react";
+import { useState, memo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Download, FileSpreadsheet, FileText, ExternalLink, Image, Subtitles, RefreshCw, Eye, X } from "lucide-react";
+import { FileSpreadsheet, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-
-interface VideoMetadata {
-  id: string;
-  name: string;
-  description: string;
-  tags: string;
-  duration: number;
-  created_time: string;
-  modified_time: string;
-  privacy: string;
-  views: number;
-  likes: number;
-  comments: number;
-  resolution: string;
-  fileSize: number;
-  status: string;
-  public_url: string;
-  download_qualities: string;
-  caption_languages: string;
-  captions_text: string;
-  thumb_small: string;
-  thumb_medium: string;
-  thumb_large: string;
-  thumb_max: string;
-  caption_download_txt: string;
-}
+import type { VimeoVideo } from "@shared/schema";
 
 interface MetadataTableProps {
-  videos: any[];
+  videos: VimeoVideo[];
   isLoading: boolean;
 }
 
-export default function MetadataTable({ videos, isLoading }: MetadataTableProps) {
+function MetadataTable({ videos, isLoading }: MetadataTableProps) {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const { toast } = useToast();
@@ -228,92 +202,8 @@ export default function MetadataTable({ videos, isLoading }: MetadataTableProps)
         </ScrollArea>
       </CardContent>
     </Card>
-
-      {/* Modals removed since columns are no longer displayed in frontend view */}
-      {/* These modals are kept for potential future use but commented out */}
-      {/*
-      <Dialog open={showThumbnailModal} onOpenChange={setShowThumbnailModal}>
-        <DialogContent className="max-w-4xl w-[95vw] h-[90vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center justify-between">
-              <span>Thumbnail Preview - {selectedVideo?.name}</span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => handleDownloadThumbnail(selectedVideo)}
-                  className="gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowThumbnailModal(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden">
-            {selectedVideo && (
-              <img
-                src={`/api/videos/${selectedVideo.id}/thumbnail${localStorage.getItem(`video-cache-version-${selectedVideo.id}`) ? `?v=${localStorage.getItem(`video-cache-version-${selectedVideo.id}`)}` : ''}`}
-                alt={`Thumbnail for ${selectedVideo.name}`}
-                className="max-w-full max-h-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="%23f3f4f6"/><text x="200" y="150" text-anchor="middle" dy=".3em" fill="%236b7280">Thumbnail not available</text></svg>';
-                }}
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showCaptionModal} onOpenChange={setShowCaptionModal}>
-        <DialogContent className="max-w-4xl w-[95vw] h-[90vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center justify-between">
-              <span>Captions Preview - {selectedVideo?.name}</span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => handleDownloadCaption(selectedVideo)}
-                  className="gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowCaptionModal(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden">
-            <ScrollArea className="h-full">
-              <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                {loadingCaption ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-                    <span className="ml-2">Loading captions...</span>
-                  </div>
-                ) : (
-                  <pre className="whitespace-pre-wrap text-sm font-mono break-words">
-                    {captionContent}
-                  </pre>
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
-      */}
     </>
   );
 }
+
+export default memo(MetadataTable);

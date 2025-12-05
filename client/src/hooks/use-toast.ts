@@ -5,8 +5,8 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_LIMIT = 5
+const TOAST_REMOVE_DELAY = 5000 // 5 seconds - was 1000000 (16+ minutes!) causing memory leak
 
 type ToasterToast = ToastProps & {
   id: string
@@ -179,7 +179,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, []) // Fixed: was [state] causing infinite re-subscription
 
   return {
     ...state,

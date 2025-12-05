@@ -107,10 +107,8 @@ export default function UploadForm({ mode, folders }: UploadFormProps) {
         });
       }
       
-      // Force a refresh of the current page after a short delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+      // REMOVED: window.location.reload() - query invalidation handles cache refresh
+      // Using reload causes poor UX and wastes network requests
     },
     onError: (error: Error) => {
       toast({
@@ -228,8 +226,6 @@ export default function UploadForm({ mode, folders }: UploadFormProps) {
     data: z.infer<typeof replaceVideoFormSchema>
   ) => {
     try {
-      console.log("Form submitted with data:", data);
-      console.log("Using videoIdInputValue:", videoIdInputValue);
 
       // Use our local state instead of form value
       const videoId = videoIdInputValue;

@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Upload, FileText, Edit, Save, Settings, Eye, Lock, Image, MessageSquare, Download, Globe, Palette, List, Subtitles, RefreshCw } from "lucide-react";
+import { Loader2, Upload, FileText, Edit, Save, Settings, Eye, Lock, Image, MessageSquare, Download, Globe, Palette, List, Subtitles, RefreshCw, FolderOpen } from "lucide-react";
 import { bulkUpdateVideos, updateVideo, fetchPresets } from "@/lib/vimeo-api";
 import type { UpdateVideo } from "@shared/schema";
 import {
@@ -34,6 +34,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import PresetEditor from "./preset-editor";
+import { useFolderOperations } from "@/stores/folderStore";
 
 interface ExtendedUpdateVideo extends UpdateVideo {
   privacy?: "anybody" | "nobody" | "password" | "unlisted" | "disable";
@@ -51,10 +52,23 @@ interface ExtendedUpdateVideo extends UpdateVideo {
 }
 
 export default function MetadataEditor() {
-  const [activeTab, setActiveTab] = useState<"bulk" | "single" | "preset">("bulk");
+  const [activeTab, setActiveTab] = useState<"bulk" | "single" | "folder" | "preset">("bulk");
   const { toast } = useToast();
   const [presets, setPresets] = useState<any[]>([]);
   const [showcases, setShowcases] = useState<any[]>([]);
+  
+  // Folder preset state
+  const { folders } = useFolderOperations();
+  const [selectedFolderId, setSelectedFolderId] = useState("");
+  const [selectedFolderPresetId, setSelectedFolderPresetId] = useState("");
+  const [folderVideos, setFolderVideos] = useState<any[]>([]);
+  const [isLoadingFolderVideos, setIsLoadingFolderVideos] = useState(false);
+  const [isApplyingFolderPreset, setIsApplyingFolderPreset] = useState(false);
+  const [folderPresetResults, setFolderPresetResults] = useState<{
+    successCount: number;
+    errorCount: number;
+    errors: any[];
+  } | null>(null);
 
   useEffect(() => {
     fetchPresets().then(setPresets).catch(console.error);
@@ -64,6 +78,83 @@ export default function MetadataEditor() {
       .then(setShowcases)
       .catch(console.error);
   }, []);
+  
+  // Load videos when folder is selected
+  const loadFolderVideos = async (folderId: string) => {
+    if (!folderId) {
+      setFolderVideos([]);
+      return;
+    }
+    
+    setIsLoadingFolderVideos(true);
+    try {
+      const response = await fetch(`/api/folders/${folderId}/videos`);
+      if (!response.ok) throw new Error("Failed to load videos");
+      const videos = await response.json();
+      setFolderVideos(videos);
+      toast({
+        title: "Folder Loaded",
+        description: `Found ${videos.length} videos in folder`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load folder videos",
+        variant: "destructive",
+      });
+      setFolderVideos([]);
+    } finally {
+      setIsLoadingFolderVideos(false);
+    }
+  };
+  
+  const handleApplyPresetToFolder = async () => {
+    if (!selectedFolderPresetId || folderVideos.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a folder with videos and a preset",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsApplyingFolderPreset(true);
+    setFolderPresetResults(null);
+    
+    try {
+      const response = await fetch("/api/folders/apply-preset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folderId: selectedFolderId,
+          presetId: selectedFolderPresetId,
+          videoIds: folderVideos.map(v => v.id),
+        }),
+      });
+      
+      if (!response.ok) throw new Error("Failed to apply preset");
+      
+      const result = await response.json();
+      setFolderPresetResults({
+        successCount: result.successCount || 0,
+        errorCount: result.errorCount || 0,
+        errors: result.errors || [],
+      });
+      
+      toast({
+        title: "Preset Applied",
+        description: `Applied to ${result.successCount} videos. Failed: ${result.errorCount}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to apply preset to folder",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplyingFolderPreset(false);
+    }
+  };
 
   // Bulk State
   const [csvContent, setCsvContent] = useState<string>("");
@@ -109,22 +200,51 @@ export default function MetadataEditor() {
     reader.readAsText(file);
   };
 
+  // Parse a CSV line handling quoted fields properly
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // Escaped quote
+          current += '"';
+          i++;
+        } else {
+          // Toggle quote mode
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
   const parseCSV = (text: string) => {
     try {
       const lines = text.split(/\r\n|\n/);
-      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const headers = parseCSVLine(lines[0]).map((h) => h.trim().toLowerCase());
       
       const updates: UpdateVideo[] = [];
       
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
         
-        const values = lines[i].split(",");
+        const values = parseCSVLine(lines[i]);
         const update: any = {};
         
         headers.forEach((header, index) => {
           const value = values[index]?.trim();
-          if (value && value.toLowerCase() !== 'null') {
+          if (value && value.toLowerCase() !== 'null' && value !== '') {
              if (header === 'video_id' || header === 'id') update.videoId = value;
              else if (header === 'title' || header === 'name') update.name = value;
              else if (header === 'description') update.description = value;
@@ -141,6 +261,11 @@ export default function MetadataEditor() {
       
       setParsedUpdates(updates);
       setBulkResults(null);
+      
+      toast({
+        title: "CSV Parsed Successfully",
+        description: `Found ${updates.length} videos to update`,
+      });
     } catch (error) {
       console.error("CSV Parse Error:", error);
       toast({
@@ -339,7 +464,7 @@ export default function MetadataEditor() {
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-8">
+        <TabsList className="grid w-full grid-cols-4 mb-8">
           <TabsTrigger value="bulk" className="flex items-center gap-2">
             <Upload className="w-4 h-4" />
             Bulk Edit (CSV)
@@ -347,6 +472,10 @@ export default function MetadataEditor() {
           <TabsTrigger value="single" className="flex items-center gap-2">
             <Edit className="w-4 h-4" />
             Individual Edit
+          </TabsTrigger>
+          <TabsTrigger value="folder" className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4" />
+            Folder Preset
           </TabsTrigger>
           <TabsTrigger value="preset" className="flex items-center gap-2">
             <Settings className="w-4 h-4" />
@@ -383,21 +512,30 @@ export default function MetadataEditor() {
 
               {parsedUpdates.length > 0 && (
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-medium">Preview ({parsedUpdates.length} videos)</h3>
-                    <Button onClick={handleBulkUpdate} disabled={isProcessing}>
+                  {/* Main Update Button - Highly Visible */}
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
+                    <Button 
+                      onClick={handleBulkUpdate} 
+                      disabled={isProcessing}
+                      className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                      size="lg"
+                    >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          Processing {parsedUpdates.length} videos...
                         </>
                       ) : (
                         <>
-                          <Save className="w-4 h-4 mr-2" />
-                          Update All
+                          <Save className="w-5 h-5 mr-2" />
+                          Update All {parsedUpdates.length} Videos
                         </>
                       )}
                     </Button>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-medium">Preview ({parsedUpdates.length} videos)</h3>
                   </div>
                   
                   <div className="border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
@@ -425,19 +563,6 @@ export default function MetadataEditor() {
                     </Table>
                   </div>
                   
-                  <Button onClick={handleBulkUpdate} disabled={isProcessing} className="w-full">
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processing {parsedUpdates.length} videos...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        Update All {parsedUpdates.length} Videos
-                      </>
-                    )}
-                  </Button>
                 </div>
               )}
 
@@ -488,7 +613,8 @@ export default function MetadataEditor() {
           </Card>
 
           {singleVideoId && (
-            <ScrollArea className="h-[calc(100vh-400px)]">
+            <div className="flex flex-col">
+              <ScrollArea className="h-[calc(100vh-450px)]">
               <Accordion type="multiple" defaultValue={["basic", "privacy"]} className="space-y-4">
                 {/* Basic Metadata */}
                 <AccordionItem value="basic" className="border rounded-lg px-4">
@@ -887,30 +1013,177 @@ export default function MetadataEditor() {
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
-
-              {/* Save Button */}
-              <div className="sticky bottom-0 bg-background pt-4 pb-2">
+              </ScrollArea>
+              
+              {/* Save Button - Outside ScrollArea so always visible */}
+              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-200 dark:border-blue-800 rounded-xl">
                 <Button 
                   onClick={handleSingleUpdate}
                   disabled={isUpdatingSingle || !singleVideoData.videoId}
-                  className="w-full"
+                  className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white"
                   size="lg"
                 >
                   {isUpdatingSingle ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Updating...
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Saving to Vimeo...
                     </>
                   ) : (
                     <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save All Changes
+                      <Save className="w-5 h-5 mr-2" />
+                      Save Changes to Vimeo
                     </>
                   )}
                 </Button>
               </div>
-            </ScrollArea>
+            </div>
           )}
+        </TabsContent>
+
+        {/* Folder Preset Tab */}
+        <TabsContent value="folder" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FolderOpen className="w-5 h-5" />
+                Apply Preset to Entire Folder
+              </CardTitle>
+              <CardDescription>
+                Select a folder and apply a preset to all videos in that folder at once
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Step 1: Select Folder */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Step 1: Select Folder</Label>
+                <Select
+                  value={selectedFolderId}
+                  onValueChange={(id) => {
+                    setSelectedFolderId(id);
+                    setFolderPresetResults(null);
+                    if (id) loadFolderVideos(id);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a folder..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>
+                        {folder.name} ({folder.path || folder.name})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Videos in folder */}
+              {selectedFolderId && (
+                <div className="space-y-2">
+                  {isLoadingFolderVideos ? (
+                    <div className="flex items-center gap-2 p-4 bg-muted rounded-lg">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Loading videos...</span>
+                    </div>
+                  ) : folderVideos.length > 0 ? (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="font-medium text-blue-800 dark:text-blue-200">
+                        {folderVideos.length} videos found in folder
+                      </p>
+                      <ScrollArea className="h-32 mt-2">
+                        <div className="space-y-1">
+                          {folderVideos.map((video) => (
+                            <div key={video.id} className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                              <span className="font-mono text-xs">{video.id}</span>
+                              <span>-</span>
+                              <span className="truncate">{video.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg">
+                      <p className="text-orange-700 dark:text-orange-300">No videos found in this folder</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 2: Select Preset */}
+              {folderVideos.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Step 2: Select Preset</Label>
+                  <Select
+                    value={selectedFolderPresetId}
+                    onValueChange={setSelectedFolderPresetId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a preset to apply..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {presets.map((preset) => (
+                        <SelectItem key={preset.uri} value={preset.uri.split('/').pop()}>
+                          {preset.name} (ID: {preset.uri.split('/').pop()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedFolderPresetId && (
+                    <p className="text-sm text-muted-foreground">
+                      Preset ID: <code className="bg-muted px-1 rounded">{selectedFolderPresetId}</code>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Apply Button */}
+              {folderVideos.length > 0 && selectedFolderPresetId && (
+                <div className="p-4 bg-green-50 dark:bg-green-950/30 border-2 border-green-200 dark:border-green-800 rounded-xl">
+                  <Button
+                    onClick={handleApplyPresetToFolder}
+                    disabled={isApplyingFolderPreset}
+                    className="w-full h-12 text-base font-semibold bg-green-600 hover:bg-green-700 text-white"
+                    size="lg"
+                  >
+                    {isApplyingFolderPreset ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Applying to {folderVideos.length} videos...
+                      </>
+                    ) : (
+                      <>
+                        <Palette className="w-5 h-5 mr-2" />
+                        Apply Preset to All {folderVideos.length} Videos
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Results */}
+              {folderPresetResults && (
+                <div className="p-4 rounded-lg bg-muted space-y-2">
+                  <h4 className="font-medium">Results</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="text-green-600 dark:text-green-400">
+                      ✓ Success: {folderPresetResults.successCount}
+                    </div>
+                    <div className="text-red-600 dark:text-red-400">
+                      ✗ Failed: {folderPresetResults.errorCount}
+                    </div>
+                  </div>
+                  {folderPresetResults.errors.length > 0 && (
+                    <div className="mt-4 max-h-[150px] overflow-y-auto text-xs text-red-500 space-y-1">
+                      {folderPresetResults.errors.map((err, i) => (
+                        <div key={i}>{err.videoId}: {err.error}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Edit Preset Tab */}
