@@ -13,12 +13,26 @@ import {
 } from "@shared/schema";
 import { Readable } from "stream";
 import { VimeoUploader, type VimeoVideo } from "./vimeo";
-import { z } from "zod";
 import archiver from "archiver";
 import ExcelJS from 'exceljs';
 import { registerOptimizedExportRoutes } from './export-routes-optimized';
-import fs from "fs/promises"; // Unified import for fs promises
+import fs from "fs/promises";
 import { registerExportRoutes } from "./export-routes";
+import { 
+  formatDuration, 
+  escapeCSV, 
+  formatDate, 
+  cleanupFile, 
+  convertVttToText,
+  logger 
+} from "./utils";
+import {
+  API_TIMEOUT,
+  DOWNLOAD_TIMEOUT,
+  DOWNLOAD_CONCURRENCY,
+  MAX_VIDEO_SIZE,
+  VIMEO_API_BASE
+} from "./constants";
 
 // Type definitions for video downloads
 interface VideoDownloadResult {
@@ -52,23 +66,7 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2GB limit
 });
 
-// Constants
-const DOWNLOAD_TIMEOUT = 60000; // 60 seconds timeout
-const CONCURRENCY = 3; // Maximum concurrent downloads
-const API_TIMEOUT = 30000; // 30 seconds for API calls
-
-// Utility function for file cleanup
-async function cleanupFile(filePath: string): Promise<void> {
-  try {
-    await fs.access(filePath);
-    await fs.unlink(filePath);
-    console.log(`Cleaned up file: ${filePath}`);
-  } catch (error) {
-    if ((error as any).code !== 'ENOENT') {
-      console.error(`Failed to clean up file ${filePath}:`, error);
-    }
-  }
-}
+// Constants imported from ./constants
 
 // Utility function for Vimeo API fetch with timeout
 async function vimeoFetch(
@@ -108,48 +106,7 @@ async function vimeoFetch(
   }
 }
 
-// Helper function to convert VTT content to plain text
-function convertVttToText(vttContent: string): string {
-  if (!vttContent) return '';
-  
-  // Simple approach: remove VTT formatting and keep only text content
-  const lines = vttContent.split('\n');
-  const textLines: string[] = [];
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    
-    // Skip empty lines
-    if (!trimmed) continue;
-    
-    // Skip VTT header
-    if (trimmed.startsWith('WEBVTT')) continue;
-    
-    // Skip metadata lines
-    if (trimmed.startsWith('NOTE') || trimmed.startsWith('STYLE') || trimmed.startsWith('REGION')) continue;
-    
-    // Skip cue numbers (just numbers)
-    if (/^\d+$/.test(trimmed)) continue;
-    
-    // Skip timestamp lines (contain -->)
-    if (trimmed.includes('-->')) continue;
-    
-    // This should be caption text - clean it up
-    const cleanText = trimmed
-      .replace(/<[^>]*>/g, '') // Remove HTML/VTT tags
-      .replace(/&lt;/g, '<')   // Decode HTML entities
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .trim();
-    
-    if (cleanText) {
-      textLines.push(cleanText);
-    }
-  }
-  
-  return textLines.join('\n').trim();
-}
+// convertVttToText imported from ./utils
 
 // Type for video metadata row
 interface VideoMetadataRow {
@@ -169,30 +126,7 @@ interface VideoMetadataRow {
   status: string;
 }
 
-// Helper functions
-function formatDate(date: string | null | undefined): string {
-  if (!date) return '[Date not available]';
-  try {
-    return new Date(date).toLocaleString();
-  } catch {
-    return '[Invalid date format]';
-  }
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return '00:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  
-  const mStr = m.toString().padStart(2, '0');
-  const sStr = s.toString().padStart(2, '0');
-  
-  if (h > 0) {
-    return `${h}:${mStr}:${sStr}`;
-  }
-  return `${mStr}:${sStr}`;
-}
+// formatDate and formatDuration imported from ./utils
 
 // Fixed: Unified getVimeoCredentials function
 async function getVimeoCredentials(): Promise<VimeoCredentials> {
@@ -646,7 +580,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         const uploadLink = ticket.link;
 
         // Step 2: Upload the thumbnail
-        const thumbnailBuffer = fs.readFileSync(thumbnailFile.path);
+        const thumbnailBuffer = await fs.readFile(thumbnailFile.path);
         const uploadResponse = await fetch(uploadLink, {
           method: "PUT",
           headers: {
@@ -660,13 +594,14 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Cleanup temp file
-        fs.unlinkSync(thumbnailFile.path);
+        await fs.unlink(thumbnailFile.path);
 
         res.json({ message: "Thumbnail uploaded successfully", pictureUri: ticket.uri });
       } catch (error) {
         console.error("Error uploading thumbnail:", error);
-        if (thumbnailFile?.path && fs.existsSync(thumbnailFile.path)) {
-          fs.unlinkSync(thumbnailFile.path);
+        // Async cleanup with error handling
+        if (thumbnailFile?.path) {
+          await cleanupFile(thumbnailFile.path);
         }
         res.status(500).json({ message: "Failed to upload thumbnail" });
       }
@@ -715,7 +650,7 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         const uploadLink = track.link;
 
         // Step 2: Upload the caption file
-        const captionContent = fs.readFileSync(captionFile.path, 'utf-8');
+        const captionContent = await fs.readFile(captionFile.path, 'utf-8');
         const uploadResponse = await fetch(uploadLink, {
           method: "PUT",
           headers: {
@@ -729,13 +664,14 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Cleanup temp file
-        fs.unlinkSync(captionFile.path);
+        await fs.unlink(captionFile.path);
 
         res.json({ message: "Caption uploaded successfully", trackUri: track.uri });
       } catch (error) {
         console.error("Error uploading caption:", error);
-        if (captionFile?.path && fs.existsSync(captionFile.path)) {
-          fs.unlinkSync(captionFile.path);
+        // Async cleanup with error handling
+        if (captionFile?.path) {
+          await cleanupFile(captionFile.path);
         }
         res.status(500).json({ message: "Failed to upload caption" });
       }
@@ -2517,12 +2453,19 @@ export default async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } finally {
-      // Clean up resources if needed
-      if (archive && !archive.finalized && !isClientDisconnected) {
+      // Clean up resources - always attempt cleanup regardless of state
+      if (archive) {
         try {
-          archive.abort();
+          if (!archive.finalized) {
+            archive.abort();
+          }
+          // Explicitly destroy the archive stream to free memory
+          if (typeof archive.destroy === 'function') {
+            archive.destroy();
+          }
         } catch (e) {
-          // Ignore abort errors in cleanup
+          // Log but don't throw on cleanup errors
+          logger.debug('Archive cleanup error (safe to ignore):', e);
         }
       }
     }
@@ -2588,12 +2531,14 @@ export default async function registerRoutes(app: Express): Promise<Server> {
           const uploader = new VimeoUploader(credentials.accessToken);
           const videoInfo = await uploader.getVideoDetails(videoId);
           
-          if (!videoInfo.files || videoInfo.files.length === 0) {
+          // Check for download links (could be in files or download property)
+          const downloads = videoInfo.download || [];
+          if (downloads.length === 0) {
             throw new Error('No download files available');
           }
           
           // Get best quality download
-          const bestDownload = videoInfo.files.reduce((best: any, current: any) => 
+          const bestDownload = downloads.reduce((best: any, current: any) => 
             (current.size || 0) > (best.size || 0) ? current : best
           );
           

@@ -177,7 +177,9 @@ export default function Download() {
                     value={selectedFolderId} 
                     onValueChange={(value) => {
                       const folder = folders?.find(f => f.id === value);
-                      handleFolderSelect(value, folder?.name || "", folder?.path || folder?.name || "");
+                      // Access path safely - it may exist on API response but not on schema type
+                      const folderAny = folder as any;
+                      handleFolderSelect(value, folder?.name || "", folderAny?.path || folderAny?.displayName || folder?.name || "");
                     }}
                     data-testid="folder-select"
                   >
@@ -193,7 +195,7 @@ export default function Download() {
                             </svg>
                             <div className="flex-1 min-w-0">
                               <div className="font-medium">{folder.name}</div>
-                              <div className="text-xs text-muted-foreground truncate">{folder.path || folder.displayName}</div>
+                              <div className="text-xs text-muted-foreground truncate">{(folder as any).path || (folder as any).displayName || folder.name}</div>
                             </div>
                           </div>
                         </SelectItem>

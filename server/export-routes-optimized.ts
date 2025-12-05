@@ -2,6 +2,8 @@
 import ExcelJS from 'exceljs';
 import { VimeoUploader } from './vimeo';
 import { storage } from './storage';
+import { formatDuration, escapeCSV, logger } from './utils';
+import { API_CONCURRENCY, MAX_RETRIES, RETRY_DELAY_BASE } from './constants';
 
 // Optimized video processing with parallel requests and intelligent batching
 async function getVideoDownloadInfoOptimized(videoId: string, credentials: any, baseUrl: string) {
@@ -138,8 +140,8 @@ class OptimizedVideoProcessor {
     this.uploader = uploader;
     this.credentials = credentials;
     this.baseUrl = baseUrl;
-    this.concurrentLimit = 10; // Process up to 10 videos simultaneously
-    this.retryLimit = 2;
+    this.concurrentLimit = API_CONCURRENCY;
+    this.retryLimit = MAX_RETRIES - 1;
   }
 
   async processVideo(videoId: string): Promise<any> {
@@ -187,29 +189,7 @@ class OptimizedVideoProcessor {
   }
 }
 
-function escapeCSV(value: any): string {
-  if (value === null || value === undefined) return '""';
-  const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return '00:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  
-  const mStr = m.toString().padStart(2, '0');
-  const sStr = s.toString().padStart(2, '0');
-  
-  if (h > 0) {
-    return `${h}:${mStr}:${sStr}`;
-  }
-  return `${mStr}:${sStr}`;
-}
+// escapeCSV and formatDuration imported from ./utils
 
 export function registerOptimizedExportRoutes(app: any) {
   app.post('/api/videos/export-metadata-optimized', async (req: any, res: any) => {

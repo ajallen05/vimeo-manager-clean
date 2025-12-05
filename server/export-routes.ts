@@ -2,6 +2,8 @@ import type { Express, Request, Response } from "express";
 import ExcelJS from 'exceljs';
 import { VimeoUploader } from "./vimeo";
 import { storage } from "./storage";
+import { formatDuration, escapeCSV, logger } from "./utils";
+import { BATCH_SIZE, VIMEO_API_BASE } from "./constants";
 
 // Helper function to get video download info
 async function getVideoDownloadInfo(videoId: string, credentials: any, baseUrl: string) {
@@ -134,30 +136,7 @@ async function getVideoDownloadInfo(videoId: string, credentials: any, baseUrl: 
   }
 }
 
-// Helper function to escape CSV values
-function escapeCSV(value: any): string {
-  if (value === null || value === undefined) return '""';
-  const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return '00:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  
-  const mStr = m.toString().padStart(2, '0');
-  const sStr = s.toString().padStart(2, '0');
-  
-  if (h > 0) {
-    return `${h}:${mStr}:${sStr}`;
-  }
-  return `${mStr}:${sStr}`;
-}
+// escapeCSV and formatDuration imported from ./utils
 
 export function registerExportRoutes(app: Express) {
   // Unified export endpoint for both Excel and CSV
@@ -215,23 +194,20 @@ export function registerExportRoutes(app: Express) {
         worksheet.getRow(1).height = 30;
 
         // Set column widths
-        if (worksheet) {
-          headers.forEach((_, index) => {
-            const col = worksheet.getColumn(index + 1);
-            col.width = 20;
-            if (['Title', 'Description', 'Tags', 'Available Qualities', 'Captions'].includes(headers[index])) {
-              col.width = 40;
-            }
-          });
-        }
+        headers.forEach((_, index) => {
+          const col = worksheet!.getColumn(index + 1);
+          col.width = 20;
+          if (['Title', 'Description', 'Tags', 'Available Qualities', 'Captions'].includes(headers[index])) {
+            col.width = 40;
+          }
+        });
       }
 
       let csvContent = format === 'csv' ? headers.join(',') + '\n' : '';
       let successCount = 0;
       let errorCount = 0;
 
-      // Process videos in batches to avoid rate limiting
-      const BATCH_SIZE = 8; // 🚀 OPTIMIZED: Increased from 3 to 8
+      // Process videos in batches to avoid rate limiting (BATCH_SIZE imported from constants)
       const batches = [];
       for (let i = 0; i < videoIds.length; i += BATCH_SIZE) {
         batches.push(videoIds.slice(i, i + BATCH_SIZE));

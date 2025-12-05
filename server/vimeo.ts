@@ -1,5 +1,6 @@
 // vimeo.ts
-import fs from "fs";
+import fs from "fs/promises";
+import { createReadStream, statSync } from "fs";
 
 export interface VimeoVideo {
   id: string;
@@ -198,7 +199,7 @@ export class VimeoUploader {
       name: data.name || '[Untitled]',
       description: processedDescription || '[No description]',
       tags: processedTags,
-      duration: data.duration || 0,
+      duration: data.duration?.toString() || null,
       downloadUrl: null, // We'll handle download URLs in the export endpoints
       embedHtml: data.embed?.html || null,
       created_time: data.created_time ? new Date(data.created_time).toLocaleString() : '[No date]',
@@ -590,7 +591,7 @@ export class VimeoUploader {
     description: string | undefined,
     folderId?: string
   ) {
-    const fileStats = fs.statSync(filePath);
+    const fileStats = await fs.stat(filePath);
     const body: UploadBody = {
       upload: {
         approach: "tus",
@@ -631,7 +632,7 @@ export class VimeoUploader {
   }
 
   private async uploadFile(filePath: string, uploadUrl: string) {
-    const fileBuffer = fs.readFileSync(filePath);
+    const fileBuffer = await fs.readFile(filePath);
 
     const response = await fetch(uploadUrl, {
       method: "PATCH",

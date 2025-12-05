@@ -41,17 +41,31 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// Cache durations in milliseconds
+const STALE_TIME = {
+  CREDENTIALS: 5 * 60 * 1000,  // 5 minutes for credentials check
+  FOLDERS: 5 * 60 * 1000,      // 5 minutes for folder data
+  VIDEOS: 60 * 1000,           // 1 minute for video data
+  PRESETS: 10 * 60 * 1000,     // 10 minutes for presets
+  DEFAULT: 2 * 60 * 1000,      // 2 minutes default
+};
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      refetchOnWindowFocus: true, // Refetch when user returns to tab
+      staleTime: STALE_TIME.DEFAULT, // Data considered fresh for 2 minutes
+      gcTime: 10 * 60 * 1000, // Keep unused data in cache for 10 minutes
+      retry: 1, // Retry failed requests once
+      retryDelay: 1000, // Wait 1 second before retry
     },
     mutations: {
       retry: false,
     },
   },
 });
+
+// Export stale times for use in specific queries
+export { STALE_TIME };

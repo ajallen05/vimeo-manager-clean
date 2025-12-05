@@ -114,12 +114,21 @@ export class MemStorage implements IStorage {
       description: insertVideo.description ?? null,
       tags: Array.isArray(insertVideo.tags) 
         ? (insertVideo.tags as string[]).filter((tag): tag is string => typeof tag === 'string')
-        : [],
+        : null,
       folderId: insertVideo.folderId ?? null,
       duration: insertVideo.duration ?? null,
       downloadUrl: insertVideo.downloadUrl ?? null,
       embedHtml: insertVideo.embedHtml ?? null,
-      createdAt: new Date()
+      createdAt: new Date(),
+      modifiedAt: insertVideo.modifiedAt ?? null,
+      privacy: insertVideo.privacy ?? null,
+      views: insertVideo.views ?? null,
+      likes: insertVideo.likes ?? null,
+      comments: insertVideo.comments ?? null,
+      resolution: insertVideo.resolution ?? null,
+      fileSize: insertVideo.fileSize ?? null,
+      status: insertVideo.status ?? null,
+      presetId: insertVideo.presetId ?? null
     };
     this.videos.set(video.id, video);
     return video;

@@ -26,7 +26,7 @@ export default function VideoModal({ video, open, onOpenChange }: VideoModalProp
     if (open && video.id) {
       fetchDownloadLinks();
     }
-  }, [open, video.id, video.modified_time]); // Re-fetch if modified_time changes
+  }, [open, video.id, video.modifiedAt]); // Re-fetch if modifiedAt changes
 
   const fetchDownloadLinks = async (forceRefresh = false) => {
     setIsLoadingLinks(true);

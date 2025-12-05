@@ -1,17 +1,38 @@
 import express, { type Request, Response, NextFunction } from "express";
 import registerRoutes from './routes';
 import { setupVite, serveStatic, log } from "./vite";
-import multer from "multer";
 import 'dotenv/config';
+import { 
+  createRateLimiter, 
+  sanitizeInput, 
+  requestTimeout, 
+  securityHeaders, 
+  requestId 
+} from "./middleware";
+import { isDevelopment, DEFAULT_PORT, API_TIMEOUT } from "./constants";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 
+// Security and utility middleware
+app.use(securityHeaders);
+app.use(requestId);
+app.use(sanitizeInput);
+
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Rate limiting for API endpoints (100 requests per minute)
+app.use('/api', createRateLimiter({ windowMs: 60000, max: 100 }));
+
+// Request timeout for non-upload/download endpoints
+app.use(requestTimeout(API_TIMEOUT));
+
+// Request logging middleware (only logs in development or for API calls)
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -21,7 +42,7 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
+    if (path.startsWith("/api") && isDevelopment()) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
@@ -45,8 +66,15 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Log error in development only
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[Error Handler]', err);
+    }
+
+    // Only send response if headers haven't been sent
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after
@@ -58,15 +86,13 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-const port = parseInt(process.env.PORT || '5000', 10);
+  // Get port from environment or use default
+  const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
+  
   server.listen({
     port,
     host: "localhost",
   }, () => {
-    log(`serving on port ${port}`);
+    log(`Server running on port ${port} (${isDevelopment() ? 'development' : 'production'})`);
   });
 })();

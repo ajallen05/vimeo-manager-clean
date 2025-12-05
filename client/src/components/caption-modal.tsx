@@ -124,7 +124,7 @@ export default function CaptionModal({ video, open, onOpenChange }: CaptionModal
             ) : (
               <div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  Showing: {captionFormat.toUpperCase()} format | Length: {displayContent.length} chars
+                  Showing: {captionFormat.toUpperCase()} format | Length: {displayContent?.length ?? 0} chars
                 </div>
                 <pre className="text-sm font-mono whitespace-pre-wrap" data-testid="caption-content">
                   {displayContent}

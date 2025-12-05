@@ -47,13 +47,29 @@ export default function SearchableFolderSelector({
   useEffect(() => {
     if (selectedFolderId && allFolders.length > 0) {
       const folder = allFolders.find(f => f.id === selectedFolderId);
-      setSelectedFolder(folder || null);
+      // Map VimeoFolder to Folder type with path fallback
+      // Note: displayName is added dynamically by the API but not in the schema
+      const folderAny = folder as any;
+      setSelectedFolder(folder ? {
+        id: folder.id,
+        name: folder.name,
+        displayName: folderAny?.displayName,
+        path: folder.path ?? folder.name,
+        uri: folder.uri
+      } : null);
     }
   }, [selectedFolderId, allFolders]);
 
-  const handleFolderClick = (folder: Folder) => {
-    setSelectedFolder(folder);
-    onFolderSelect(folder.id, folder.name, folder.path);
+  const handleFolderClick = (folder: Folder | { id: string; name: string; path?: string; displayName?: string; uri: string }) => {
+    const mappedFolder: Folder = {
+      id: folder.id,
+      name: folder.name,
+      displayName: folder.displayName,
+      path: folder.path ?? folder.name,
+      uri: folder.uri
+    };
+    setSelectedFolder(mappedFolder);
+    onFolderSelect(mappedFolder.id, mappedFolder.name, mappedFolder.path);
     setSearchQuery(""); // Clear search after selection
   };
 
